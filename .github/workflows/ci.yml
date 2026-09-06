@@ -70,14 +70,27 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
 
-      # NOTE: "iPhone 16" is a best guess at a simulator name that will still exist
-      # on whatever Xcode version this runner defaults to. If this step fails with
-      # "unable to find a device matching", run `xcrun simctl list devicetypes` in
-      # a debug step and swap in a name that's actually available.
+      - name: Find an available iOS Simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          NAME=$(xcrun simctl list devices available -j | jq -r '
+            .devices | to_entries[] | .value[]
+            | select(.isAvailable == true and (.name | test("iPhone")))
+            | .name
+          ' | head -n1)
+          if [ -z "$NAME" ]; then
+            echo "No available iPhone simulator found - listing everything for debugging:"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Using simulator: $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
       - name: Run unit tests
         run: |
           xcodebuild test \
             -project MultilingualWhisper.xcodeproj \
             -scheme MultilingualWhisper \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }},OS=latest" \
             CODE_SIGNING_ALLOWED=NO

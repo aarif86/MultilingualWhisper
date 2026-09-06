@@ -29,8 +29,12 @@ targets:
         NSMicrophoneUsageDescription: "Nasar Flow needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        # Both reference build settings rather than hardcoding values, so
+        # release.yml can bump CURRENT_PROJECT_VERSION per run (App Store
+        # Connect rejects re-uploading a build number it's already seen) without
+        # editing this file.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

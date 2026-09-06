@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
+    let customDictionaryService: CustomDictionaryService
     @State private var showClearAllConfirmation = false
     // Toggled after clearing the debug log to force `hasDebugLog` to
     // re-evaluate - SwiftUI has no other reason to know the file on disk changed.
@@ -15,8 +16,9 @@ struct SettingsView: View {
         return FileManager.default.fileExists(atPath: DebugLogger.shared.fileURL.path)
     }
 
-    init(modelDownloadService: ModelDownloadService) {
+    init(modelDownloadService: ModelDownloadService, customDictionaryService: CustomDictionaryService) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
+        self.customDictionaryService = customDictionaryService
     }
 
     var body: some View {
@@ -68,6 +70,16 @@ struct SettingsView: View {
                     Text("Recording Settings")
                 } footer: {
                     Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
+                }
+
+                Section {
+                    NavigationLink {
+                        CustomDictionaryView(dictionaryService: customDictionaryService)
+                    } label: {
+                        Label("Custom Dictionary", systemImage: "textformat.abc")
+                    }
+                } footer: {
+                    Text("Teach the app words it keeps getting wrong - a name, a product, local slang. Applied after transcription, on every model.")
                 }
 
                 Section("Data Management") {

@@ -8,15 +8,21 @@ struct MultilingualWhisperApp: App {
     @State private var audioService = AudioService()
     @State private var modelDownloadService: ModelDownloadService
     @State private var whisperService: WhisperService
+    @State private var customDictionaryService: CustomDictionaryService
     @State private var quickDictateActive = false
 
     init() {
         // whisperService depends on modelDownloadService (it asks it "is X downloaded,
         // where's the file"), so it can't just be another independently-defaulted
         // @State property - it has to be built after modelDownloadService exists.
+        // customDictionaryService is built once here and threaded into both
+        // whisperService and Settings, so edits made in Settings actually affect
+        // live transcription instead of a second, disconnected instance.
         let downloadService = ModelDownloadService()
+        let dictionaryService = CustomDictionaryService()
         _modelDownloadService = State(initialValue: downloadService)
-        _whisperService = State(initialValue: WhisperService(modelStore: downloadService))
+        _customDictionaryService = State(initialValue: dictionaryService)
+        _whisperService = State(initialValue: WhisperService(modelStore: downloadService, customDictionary: dictionaryService))
     }
 
     var body: some Scene {
@@ -25,6 +31,7 @@ struct MultilingualWhisperApp: App {
                 audioService: audioService,
                 whisperService: whisperService,
                 modelDownloadService: modelDownloadService,
+                customDictionaryService: customDictionaryService,
                 quickDictateActive: $quickDictateActive
             )
             // The keyboard extension launches nasarflow://dictate (Full Access

@@ -252,6 +252,36 @@ Explicit simplifications in this first cut, in rough order of how much they matt
   working against Xcode 26.6 as of 2026-09-06 - if a much later Xcode version
   rejects it, check `xcodebuild -help` on whatever version your runner has.
 
+## Credits & Prior Art
+
+The Singlish and Arabic models actually in use are credited inline in
+[Model files](#2-model-files) above. This section is different: research and prior
+art that shaped this app's thinking on code-switching, without (yet) being code or
+weights actually shipped here. Full write-up: `docs/code-switching-research.md`.
+
+- **[Mesolitica](https://github.com/mesolitica)** (Malaysia) — their
+  `malaysian-whisper-*` and `finetune-whisper-small-ms-singlish-v2` models are the
+  closest existing open fine-tunes to this app's Malay/Singlish code-switching
+  target. Worth evaluating as a future upgrade once their exact license is confirmed
+  and the conversion has been validated against real audio.
+- **A\*STAR I2R / IMDA** — the National Speech Corpus and its MNSC (Multitask
+  National Speech Corpus) re-release are real Malay/Mandarin/Tamil↔English
+  code-switching data under the Singapore Open Data Licence, likely richer
+  code-switch coverage than whatever subset this app's current Singlish model
+  was tuned on.
+- **[ahmedheakl](https://huggingface.co/ahmedheakl) / the ArzEn-LLM project** —
+  `arazn-whisper-medium` (MIT licensed), a clean, ready-to-credit Arabic-English
+  code-switching fine-tune, one size class up from this app's current Arabic model.
+- **[whisper.cpp](https://github.com/ggml-org/whisper.cpp) community** — its own
+  [discussion #598](https://github.com/ggml-org/whisper.cpp/discussions/598) on
+  code-switching confirms the only known workaround (seeding a bilingual text
+  prompt) is the same `initial_prompt` mechanism already in this codebase, just
+  for a different purpose than the one currently disabled.
+
+No Arabic+Malay code-switching model or dataset was found anywhere in this
+research — a genuine, confirmed gap in the open-source ecosystem, not something
+this list failed to look hard enough for.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).

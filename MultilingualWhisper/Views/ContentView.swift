@@ -4,6 +4,7 @@ struct ContentView: View {
     let audioService: AudioService
     let whisperService: WhisperService
     let modelDownloadService: ModelDownloadService
+    let customDictionaryService: CustomDictionaryService
     @Binding var quickDictateActive: Bool
 
     var body: some View {
@@ -14,7 +15,7 @@ struct ContentView: View {
             HistoryView()
                 .tabItem { Label("History", systemImage: "clock") }
 
-            SettingsView(modelDownloadService: modelDownloadService)
+            SettingsView(modelDownloadService: modelDownloadService, customDictionaryService: customDictionaryService)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .fullScreenCover(isPresented: $quickDictateActive) {

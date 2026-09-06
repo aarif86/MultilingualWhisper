@@ -85,4 +85,18 @@ final class WhisperServiceRoutingTests: XCTestCase {
 
         XCTAssertEqual(result.text, "hello")
     }
+
+    func testCustomDictionaryCorrectionsApplyToTheFinalTextEndToEnd() async throws {
+        // Pins down the actual wiring (WhisperService -> CustomDictionaryService),
+        // not just CustomDictionaryService.apply(to:) in isolation - this is exactly
+        // the class of bug this repo's routing tests already exist to catch.
+        let mock = MockWhisperEngine(text: "wah nassar can one lah")
+        let dictionary = CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests.\(UUID().uuidString)")!)
+        dictionary.add(original: "nassar", replacement: "Nasar")
+        let service = WhisperService(modelStore: StubModelStore(), customDictionary: dictionary, makeEngine: { _ in mock })
+
+        let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+
+        XCTAssertEqual(result.text, "wah Nasar can one lah")
+    }
 }

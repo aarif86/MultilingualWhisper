@@ -48,7 +48,7 @@ final class AudioService {
     private var silenceStartDate: Date?
     private var onAutoStop: (() -> Void)?
     private var sampleStreamTask: Task<Void, Never>?
-    private var sampleContinuation: AsyncStream<(chunk: [Float], rms: Float)>.Continuation?
+    private var sampleContinuation: AsyncStream<(samples: [Float], rms: Float)>.Continuation?
 
     // `nonisolated(unsafe)`: read-only after init, and accessed from `convert` below,
     // which deliberately runs off the main actor (on the audio render thread) - a
@@ -110,7 +110,7 @@ final class AudioService {
         // AsyncStream guarantees delivery in yield order, which a scattered `Task {}`
         // per callback does not - so every chunk funnels through one continuation
         // into one single long-lived consuming task instead.
-        let (stream, continuation) = AsyncStream<(chunk: [Float], rms: Float)>.makeStream()
+        let (stream, continuation) = AsyncStream<(samples: [Float], rms: Float)>.makeStream()
         sampleContinuation?.finish()
         sampleContinuation = continuation
         sampleStreamTask?.cancel()

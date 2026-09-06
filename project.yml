@@ -45,6 +45,18 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # Lets the NasarFlowKeyboard extension launch the app to record (see
+        # DictationHandoff.swift / NasarFlowKeyboard/) - a keyboard extension
+        # can never access the microphone itself, Full Access or not.
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - nasarflow
+            CFBundleURLName: com.multilingualwhisper.app
+    entitlements:
+      path: Generated/MultilingualWhisper.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.multilingualwhisper.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.multilingualwhisper.app
@@ -61,6 +73,16 @@ targets:
         # to manual signing with real values via xcodebuild -destination/-arguments,
         # not by editing this file - that keeps this project.yml usable by anyone
         # who forks the repo without touching Apple account details in two places.
+        #
+        # PROVISIONING_PROFILE_SPECIFIER is the one exception, baked in here rather
+        # than passed on the command line: once there's a second target (the
+        # keyboard extension) needing its OWN different profile, a single global
+        # -PROVISIONING_PROFILE_SPECIFIER=X override on the archive command would
+        # wrongly apply to both targets. Each target names its own profile here
+        # instead, by the name it's expected to be created with in Apple's portal
+        # (see README) - release.yml only needs to install both profiles, not know
+        # which one belongs to which target.
+        PROVISIONING_PROFILE_SPECIFIER: "Nasar Flow"
     dependencies:
       # whisper.xcframework is a dynamic framework (a real .dylib), not a static
       # one - confirmed the hard way, via a real TestFlight crash log: without
@@ -70,10 +92,46 @@ targets:
       # ever copies the actual dylib into the app bundle's Frameworks/ folder.
       - framework: vendor/whisper.cpp/build-apple/whisper.xcframework
         embed: true
+      - target: NasarFlowKeyboard
+        embed: true
     scheme:
       testTargets:
         - MultilingualWhisperTests
       gatherCoverageData: true
+
+  NasarFlowKeyboard:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: NasarFlowKeyboard
+      - path: MultilingualWhisper/Shared
+    info:
+      path: Generated/NasarFlowKeyboard.Info.plist
+      properties:
+        CFBundleDisplayName: "Nasar Flow"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            RequestsOpenAccess: true
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+    entitlements:
+      path: Generated/NasarFlowKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.multilingualwhisper.app
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.multilingualwhisper.app.keyboard
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # Same reasoning as the main target - see the comment on its
+        # PROVISIONING_PROFILE_SPECIFIER above.
+        PROVISIONING_PROFILE_SPECIFIER: "Nasar Flow Keyboard"
 
   MultilingualWhisperTests:
     type: bundle.unit-test

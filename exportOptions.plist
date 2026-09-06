@@ -11,7 +11,9 @@
 	<key>provisioningProfiles</key>
 	<dict>
 		<key>com.multilingualwhisper.app</key>
-		<string>__PROVISIONING_PROFILE_NAME__</string>
+		<string>Nasar Flow</string>
+		<key>com.multilingualwhisper.app.keyboard</key>
+		<string>Nasar Flow Keyboard</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

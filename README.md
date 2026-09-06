@@ -38,6 +38,56 @@ below for what's still deliberately simplified.
 - **History & Settings** - transcriptions persist via SwiftData; app preferences via
   `UserDefaults`.
 
+## Keyboard extension
+
+`NasarFlowKeyboard` is a system-wide custom keyboard (a separate Xcode
+extension target, `com.multilingualwhisper.app.keyboard`) with a "Dictate"
+button, so Nasar Flow can be used for input in any app - Messages, Notes,
+anywhere there's a text field - not just its own screens.
+
+**It can't record audio itself.** iOS has blocked microphone access from
+keyboard extensions entirely since iOS 8, and that's true even with "Full
+Access" granted - there's no exception, by design (otherwise any installed
+keyboard could silently record everything said, not just everything typed).
+This isn't a shortcut specific to this app; it's the same wall every
+third-party dictation keyboard hits, including well-known ones like Willow and
+Wispr Flow. So the flow is:
+
+1. Tap **Dictate** in the keyboard
+2. It switches you to Nasar Flow (`nasarflow://dictate`), which records and
+   transcribes using the exact same pipeline as the main app
+3. The result is copied to your clipboard and dropped into a shared App Group
+   container
+4. Switch back to whatever you were doing - the keyboard shows an **Insert**
+   button with a preview of the text, or just paste normally
+
+### Extra setup this needs
+
+Every extension has its own bundle ID, so this needs a second round of the
+same Apple Developer Portal steps as the main app, plus an App Group so the
+two processes can hand data to each other:
+
+1. **Register a new App ID**: `com.multilingualwhisper.app.keyboard`
+   (Certificates, Identifiers & Profiles → Identifiers → **+**)
+2. **Enable "App Groups"** as a capability on *both* App IDs - the existing
+   `com.multilingualwhisper.app` and the new `.keyboard` one
+3. **Create the App Group** itself (Identifiers → App Groups → **+**):
+   `group.com.multilingualwhisper.app`, then attach it to both App IDs
+4. **Re-generate the main app's existing "Nasar Flow" profile** - it was
+   created before App Groups existed on its App ID, so it's stale until you
+   download a fresh copy (same name is fine, Apple lets you regenerate in place)
+5. **Create a new profile for the keyboard**: Profiles → **+** → App Store
+   distribution → the new `.keyboard` App ID → the same Apple Distribution
+   certificate already in use → name it exactly **`Nasar Flow Keyboard`**
+   (this exact string is hardcoded in both `project.yml` and
+   `exportOptions.plist`)
+6. Update the two GitHub secrets described in [Apple signing](#3-apple-signing-for-testflight-only)
+
+After installing the TestFlight build with the keyboard included: **Settings
+app → General → Keyboard → Keyboards → Add New Keyboard → Nasar Flow**, then
+tap it again and turn on **Allow Full Access** (required - a keyboard needs it
+to be allowed to open another app at all).
+
 ## Requirements
 
 - iOS 17.0+ (SwiftData and the `@Observable` macro both require it)
@@ -149,6 +199,14 @@ doesn't prove the weights or vocab came through correctly.
 | `APPLE_API_KEY_ID` | From an App Store Connect API key (Users and Access → Integrations) |
 | `APPLE_API_ISSUER_ID` | Same page as above |
 | `APPLE_API_KEY_BASE64` | `base64 -i AuthKey_XXXXXXXXXX.p8 \| pbcopy` of that key's downloaded file |
+
+If you've added the keyboard extension (see [Keyboard extension](#keyboard-extension)
+below), two more are needed:
+
+| Secret | What it is |
+|---|---|
+| `APPLE_PROVISIONING_PROFILE_BASE64` | **Re-generate and replace this one** - the main app's App ID now needs the App Groups capability, so its existing profile is stale until re-downloaded |
+| `APPLE_KEYBOARD_PROVISIONING_PROFILE_BASE64` | A *second*, separate profile for the `com.multilingualwhisper.app.keyboard` App ID |
 
 `release.yml` has successfully archived, signed, exported, and uploaded a build
 to TestFlight from this exact codebase (as of 2026-09-06) - it follows Apple's

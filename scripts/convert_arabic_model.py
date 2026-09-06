@@ -6,11 +6,19 @@ Thin wrapper around whisper.cpp's own conversion script
 (vendor/whisper.cpp/models/convert-h5-to-ggml.py) - see convert_singlish_model.py
 for the full explanation of what that script does and why this doesn't reimplement it.
 
-IMPORTANT - verify HF_MODEL_ID before running this (and its FALLBACK_MODEL_ID).
-Hugging Face model availability and quality benchmarks drift over time; confirm
-whichever repo you pick is still there and is actually a whisper-small (or
-whisper-base) fine-tune before spending the bandwidth to clone and convert it -
-see https://huggingface.co/models?search=whisper+arabic
+Verified 2026-09-06: neither "moayad/whisper-small-arabic" nor
+"ali2392/whisper-base-arabic" (this app's original named sources) exist as
+public repos (HF API returns 401 for both). Replaced with
+"oddadmix/whisper-small-arabic-dialectal" - explicitly a whisper-small
+fine-tune (base_model: openai/whisper-small, d_model=768, 12 encoder/decoder
+layers) trained for multi-dialect colloquial Arabic (amiyah), not Modern
+Standard/Quranic Arabic - matches this app's actual need. Its own model card
+reports ~43% WER / ~15% CER on a 932-clip held-out set and explicitly says
+"private/internal - evaluate on your own data before production use", so
+expect it to need real-world validation, not to be highly accurate out of the
+box. The fallback is a general (non-dialectal, Common-Voice-trained, so
+skews Modern Standard Arabic) whisper-small Arabic model - only used if the
+primary clone fails.
 
 Usage:
     pip install torch transformers numpy
@@ -25,8 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-HF_MODEL_ID = "moayad/whisper-small-arabic"       # <-- verify this, see note above
-FALLBACK_MODEL_ID = "ali2392/whisper-base-arabic"  # used if HF_MODEL_ID can't be cloned
+HF_MODEL_ID = "oddadmix/whisper-small-arabic-dialectal"
+FALLBACK_MODEL_ID = "Salama1429/KalemaTech-Arabic-STT-ASR-based-on-Whisper-Small"
 OUTPUT_NAME = "ggml-small-arabic.bin"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

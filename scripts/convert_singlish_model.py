@@ -7,14 +7,13 @@ This is a thin wrapper around whisper.cpp's own conversion script
 mapping HF transformers weight names to whisper.cpp's GGML layout, and is
 tracked as part of the whisper.cpp submodule rather than reimplemented here.
 
-IMPORTANT - verify HF_MODEL_ID before running this. Multiple "Singlish Whisper"
-fine-tunes exist on Hugging Face under different namespaces (this app's original
-spec named "ivabojic/whisper-small-singlish-122k"; at the time this script was
-written, a model with the same name/training-set description was also found
-published as "jensenlwt/whisper-small-singlish-122k"). Check
-https://huggingface.co/models?search=whisper-small-singlish and confirm which
-repo you actually want before spending the time/bandwidth to convert it -
-these checkpoints are ~1GB+ to clone.
+Verified 2026-09-06: "ivabojic/whisper-small-singlish-122k" (this app's original
+named source) does not exist as a public repo (HF API returns 401). The model
+actually matching that name/training-set description (122k-sample fine-tune of
+openai/whisper-small on Singlish) is published at
+"jensenlwt/whisper-small-singlish-122k" - confirmed to exist, have real
+model.safetensors weights, and use the standard whisper-small architecture
+(d_model=768, 12 encoder/decoder layers) via its config.json.
 
 Usage:
     pip install torch transformers numpy
@@ -29,7 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-HF_MODEL_ID = "ivabojic/whisper-small-singlish-122k"  # <-- verify this, see note above
+HF_MODEL_ID = "jensenlwt/whisper-small-singlish-122k"
 OUTPUT_NAME = "ggml-small-singlish.bin"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

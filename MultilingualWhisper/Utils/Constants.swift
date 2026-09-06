@@ -19,31 +19,40 @@ enum Constants {
 
     // MARK: - Model hosting
     //
-    // These are NOT real, working URLs. Whisper GGML models are 250MB-1GB+ each,
-    // far too large to bundle in the app or commit to git. Host the converted
-    // .bin files yourself (GitHub Releases works well and is free up to 2GB/file)
-    // and replace these placeholders before shipping. See scripts/ and README.md
-    // for the conversion + hosting steps.
-
-    static let modelDownloadBaseURL = "https://github.com/REPLACE_ME/MultilingualWhisper/releases/download/models-v1"
+    // Singlish and Arabic are this repo's own conversions, hosted as GitHub
+    // Release assets (converted 2026-09-06, verified against real whisper-cli.exe
+    // transcriptions before upload - not just a clean conversion exit code):
+    //   - Singlish: jensenlwt/whisper-small-singlish-122k
+    //   - Arabic:   oddadmix/whisper-small-arabic-dialectal (colloquial/dialectal,
+    //     not Modern Standard/Quranic Arabic - see scripts/convert_arabic_model.py
+    //     for why, and that model's own "evaluate before production use" caveat)
+    // English and Multilingual point at whisper.cpp's own pre-converted stock
+    // models - no conversion needed, but also no checksum: verifying one properly
+    // means downloading the whole ~465MB file up front just to hash it, which
+    // isn't worth it for a bonus/fallback model nobody asked to harden. Verification
+    // is simply skipped for any model with no entry in modelChecksums - see
+    // ModelDownloadService.finalizeDownload.
 
     static var modelRemoteURLs: [WhisperModelType: URL] = [
-        .singlish: URL(string: "\(modelDownloadBaseURL)/ggml-small-singlish.bin")!,
-        .arabic: URL(string: "\(modelDownloadBaseURL)/ggml-small-arabic.bin")!,
-        .english: URL(string: "\(modelDownloadBaseURL)/ggml-small.en.bin")!,
-        .multilingual: URL(string: "\(modelDownloadBaseURL)/ggml-small.bin")!,
+        .singlish: URL(string: "https://github.com/aarif86/MultilingualWhisper/releases/download/models-v1/ggml-small-singlish.bin")!,
+        .arabic: URL(string: "https://github.com/aarif86/MultilingualWhisper/releases/download/models-v1/ggml-small-arabic.bin")!,
+        .english: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin")!,
+        .multilingual: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin")!,
     ]
 
-    /// SHA-256 checksums for the files above. Fill these in once you've hosted
-    /// your own converted models — ModelDownloadService refuses to install a
-    /// download that doesn't match (when a checksum is present here).
-    static var modelChecksums: [WhisperModelType: String] = [:]
+    /// SHA-256 checksums, lowercase hex. ModelDownloadService refuses to install a
+    /// download whose hash doesn't match one listed here - a model with no entry
+    /// here downloads without verification (see note above).
+    static var modelChecksums: [WhisperModelType: String] = [
+        .singlish: "d509f441ce1ee5926998f34f3b95ff5dd046e050c44ccd0d8e85c945acaf6801",
+        .arabic: "d4a1ffc77291ee24bc3fae9d3801b38006ef40f4ae6ce86b070e0de33bd258ba",
+    ]
 
     static var modelApproxSizeBytes: [WhisperModelType: Int64] = [
-        .singlish: 500_000_000,
-        .arabic: 500_000_000,
-        .english: 500_000_000,
-        .multilingual: 500_000_000,
+        .singlish: 487_601_984,
+        .arabic: 487_622_122,
+        .english: 487_614_201,
+        .multilingual: 487_601_967,
     ]
 
     // MARK: - Audio

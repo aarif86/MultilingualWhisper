@@ -129,7 +129,9 @@ final class WhisperService {
     ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
 
-        let firstEngine = try await loadEngine(for: defaultModel)
+        let effectiveDefaultModel = try await resolveDefaultModel(samples: samples, fallback: defaultModel)
+
+        let firstEngine = try await loadEngine(for: effectiveDefaultModel)
         // Force the same language hint the live preview already used for this
         // model (previously `nil`, i.e. let whisper.cpp auto-detect the language
         // from scratch) - nothing ever consumed that auto-detected language, and
@@ -142,12 +144,12 @@ final class WhisperService {
         let draftText = try await runChunked(
             samples: samples,
             engine: firstEngine,
-            languageHint: defaultModel.languageHint,
-            initialPrompt: defaultModel.initialPrompt
+            languageHint: effectiveDefaultModel.languageHint,
+            initialPrompt: effectiveDefaultModel.initialPrompt
         )
         let classification = classifier.classify(text: draftText)
 
-        let shouldReroute = classification.recommendedModel != defaultModel
+        let shouldReroute = classification.recommendedModel != effectiveDefaultModel
             && classification.confidence >= reroutingConfidenceThreshold
             && modelStore.isDownloaded(classification.recommendedModel)
 
@@ -160,7 +162,7 @@ final class WhisperService {
         guard shouldReroute else {
             return TranscriptionResult(
                 text: draftText,
-                modelUsed: defaultModel,
+                modelUsed: effectiveDefaultModel,
                 languageTag: classification.languageTag,
                 languageComponents: classification.components
             )
@@ -179,6 +181,34 @@ final class WhisperService {
             languageTag: classification.languageTag,
             languageComponents: classification.components
         )
+    }
+
+    /// Cheap, audio-based pre-check (see `WhisperEngine.arabicLanguageProbability`)
+    /// that swaps the two-pass auto-routing's starting model from Singlish to
+    /// Arabic when the audio is confidently Arabic - avoiding a full Singlish
+    /// transcription pass that the text classifier below would end up discarding
+    /// anyway. Only ever a latency optimization, never a correctness requirement:
+    /// any failure here (engine not loadable, native call throws) just falls back
+    /// to `fallback` and lets the existing draft-transcribe-then-classify routing
+    /// below reach the same answer the slower way, as it already did before this
+    /// existed. NOT YET VERIFIED ON A REAL DEVICE - see the doc comment on
+    /// `WhisperEngine.arabicLanguageProbability`.
+    private func resolveDefaultModel(samples: [Float], fallback: WhisperModelType) async throws -> WhisperModelType {
+        guard fallback != .arabic, modelStore.isDownloaded(.arabic) else { return fallback }
+
+        let prefixCount = min(samples.count, Int(3.0 * Constants.sampleRate))
+        guard let checkEngine = try? await loadEngine(for: fallback),
+              let probability = try? await checkEngine.arabicLanguageProbability(samples: Array(samples.prefix(prefixCount))),
+              probability >= Constants.arabicPreCheckThreshold
+        else {
+            return fallback
+        }
+
+        DebugLogger.shared.log(
+            "native LID pre-check: arabicProbability=\(probability) - starting with Arabic model instead of \(fallback.rawValue)",
+            category: "whisper"
+        )
+        return .arabic
     }
 
     /// Splits long recordings into ~30s windows before decoding, per the spec's

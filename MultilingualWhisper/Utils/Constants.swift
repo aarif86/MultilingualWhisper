@@ -103,6 +103,14 @@ enum Constants {
     /// dialectal Arabic rather than Modern Standard Arabic.
     static let arabicInitialPrompt = "بسم الله الرحمن الرحيم، ان شاء الله، ما شاء الله."
 
+    /// Threshold for `WhisperEngine.arabicLanguageProbability`'s use in
+    /// `WhisperService.resolveDefaultModel` - a fast, audio-based pre-check that
+    /// starts the two-pass auto-routing directly on the Arabic model instead of
+    /// wasting a full Singlish pass first on clearly-Arabic audio. An initial
+    /// estimate, not yet tuned against real audio (no device available when this
+    /// was written) - see docs/code-switching-research.md Part 4.
+    static let arabicPreCheckThreshold: Float = 0.5
+
     static let malayKeywords: Set<String> = [
         "makan", "minum", "jalan", "kampung", "balik", "pergi", "datang",
         "sudah", "belum", "tolong", "terima", "kasih", "selamat", "boleh",

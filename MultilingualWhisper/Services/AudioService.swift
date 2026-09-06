@@ -160,6 +160,12 @@ final class AudioService {
         return samples
     }
 
+    /// A copy of whatever's been captured so far, without stopping anything -
+    /// for periodic "live" re-transcription while still recording.
+    func snapshotSamples() -> [Float] {
+        samples
+    }
+
     // MARK: - Main-actor state updates (called from the tap's Task hop)
 
     private func ingest(chunk: [Float], rms: Float) {

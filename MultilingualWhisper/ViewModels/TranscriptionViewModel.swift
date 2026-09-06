@@ -29,6 +29,8 @@ final class TranscriptionViewModel {
     private let whisperService: WhisperService
     private let settings: AppSettings
     private var activeModelContext: ModelContext?
+    private var liveUpdateTask: Task<Void, Never>?
+    private var isLiveTranscribing = false
 
     init(audioService: AudioService, whisperService: WhisperService, settings: AppSettings = .shared) {
         self.audioService = audioService
@@ -84,14 +86,55 @@ final class TranscriptionViewModel {
                     }
                 }
                 phase = .recording
+                startLiveUpdates()
             } catch {
                 phase = .error(error.localizedDescription)
             }
         }
     }
 
+    /// Re-transcribes whatever's been captured so far every couple of seconds
+    /// while recording, so text appears as you talk instead of only at the end.
+    /// This is a live *preview* only - it never throws to the user (a transient
+    /// failure here just means the preview doesn't update that one time; the
+    /// authoritative result still comes from the full transcription in
+    /// `stopAndTranscribe` once recording actually stops) and deliberately uses a
+    /// single forced model rather than the full two-pass auto-routing, since
+    /// re-running that every 2 seconds on a growing buffer would get expensive.
+    private func startLiveUpdates() {
+        liveUpdateTask?.cancel()
+        liveUpdateTask = Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !Task.isCancelled, self.isRecording else { break }
+                await self.performLiveUpdate()
+            }
+        }
+    }
+
+    private func performLiveUpdate() async {
+        guard !isLiveTranscribing else { return }
+        let snapshot = audioService.snapshotSamples()
+        guard snapshot.count > Int(0.5 * Constants.sampleRate) else { return }
+
+        isLiveTranscribing = true
+        defer { isLiveTranscribing = false }
+
+        let model = settings.languageMode.pinnedModel ?? .singlish
+        guard let result = try? await whisperService.transcribe(samples: snapshot, using: model) else { return }
+        guard isRecording else { return } // stopped for real while this was running
+        transcript = applyPunctuationPreference(to: result.text)
+    }
+
     private func stopAndTranscribe() {
-        guard isRecording else { return }
+        // Not `guard isRecording` - by the time an auto-stop-triggered call gets
+        // here, AudioService has *already* set isRecording false (it stops itself
+        // before invoking the callback that leads here), so that check would
+        // discard every auto-stopped recording without ever transcribing it.
+        // Guarding on phase instead only blocks genuine double-invocation.
+        guard phase != .transcribing else { return }
+        liveUpdateTask?.cancel()
+        liveUpdateTask = nil
         let samples = audioService.stopRecording()
         let duration = recordingElapsed
         phase = .transcribing

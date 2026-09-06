@@ -32,8 +32,15 @@ final class AudioService {
     /// When false, recording only stops when `stopRecording()` is called explicitly.
     var vadEnabled = true
     var vadThreshold: Float = Constants.defaultVADThreshold
-    /// How long the input must stay below threshold before auto-stop fires.
-    var silenceTimeout: TimeInterval = 1.6
+    /// How long the input must stay below threshold before auto-stop fires. 1.6s
+    /// was too aggressive in practice - the natural pause between tapping record
+    /// and actually starting to speak was often longer than that on its own,
+    /// auto-stopping before the user said anything.
+    var silenceTimeout: TimeInterval = 2.5
+    /// VAD doesn't evaluate at all until this much time has passed, so the normal
+    /// "tap record, take a breath, start talking" beat never gets misread as
+    /// trailing silence from a previous (nonexistent) utterance.
+    private let vadGracePeriod: TimeInterval = 1.2
 
     private let audioEngine = AVAudioEngine()
     private var samples: [Float] = []
@@ -73,21 +80,33 @@ final class AudioService {
         elapsed = 0
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+        // .measurement disables the system's automatic gain control, which produced
+        // real speech quiet enough to misread as silence on-device. .default keeps
+        // normal AGC, giving levels much closer to what the VAD threshold assumes -
+        // Whisper is trained on a huge range of real-world (including AGC'd) audio,
+        // so this doesn't meaningfully cost transcription quality.
+        try session.setCategory(.record, mode: .default, options: [.duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let input = audioEngine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-        guard let converter = AVAudioConverter(from: inputFormat, to: Self.targetFormat) else {
-            throw AudioServiceError.engineSetupFailed
-        }
+
+        // Querying inputNode.outputFormat(forBus:) before the engine has ever been
+        // prepared/started can report a stale format on some devices, silently
+        // producing a converter built for the wrong sample rate. Passing `format:
+        // nil` here makes the tap use the bus's actual current format instead of a
+        // predicted one, and the converter below is built from that same delivered
+        // buffer - so it can never mismatch what's really being captured.
+        var converter: AVAudioConverter?
 
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self, let converted = Self.convert(buffer, using: converter) else { return }
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+            if converter == nil {
+                converter = AVAudioConverter(from: buffer.format, to: Self.targetFormat)
+            }
+            guard let converter, let converted = Self.convert(buffer, using: converter) else { return }
             let (chunk, rms) = converted
             Task { @MainActor in
-                self.ingest(chunk: chunk, rms: rms)
+                self?.ingest(chunk: chunk, rms: rms)
             }
         }
 
@@ -128,10 +147,13 @@ final class AudioService {
     }
 
     private func evaluateVAD(rms: Float) {
-        guard vadEnabled else { return }
+        guard vadEnabled, elapsed > vadGracePeriod else { return }
         // rms on 16-bit-normalized Float32 speech is typically well under 0.1;
-        // vadThreshold (0...1, from Settings) is scaled down into that range.
-        let silenceCutoff = vadThreshold * 0.05
+        // vadThreshold (0...1, from Settings) is scaled down into that range. This
+        // multiplier was too high in practice (0.05, i.e. cutoff 0.035 at the
+        // default threshold) - real speech was measured quiet enough to read as
+        // "silence" continuously. Lowered so only near-total silence counts.
+        let silenceCutoff = vadThreshold * 0.015
         if rms < silenceCutoff {
             if silenceStartDate == nil { silenceStartDate = Date() }
             if let start = silenceStartDate,

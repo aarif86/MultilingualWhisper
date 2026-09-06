@@ -22,6 +22,11 @@ final class SettingsViewModel {
         set { settings.vadSensitivity = newValue }
     }
 
+    var autoStopOnSilence: Bool {
+        get { settings.autoStopOnSilence }
+        set { settings.autoStopOnSilence = newValue }
+    }
+
     var autoPunctuation: Bool {
         get { settings.autoPunctuation }
         set { settings.autoPunctuation = newValue }

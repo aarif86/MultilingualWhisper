@@ -23,6 +23,13 @@ final class AppSettings {
         didSet { defaults.set(vadSensitivity, forKey: Keys.vadSensitivity) }
     }
 
+    /// Escape hatch for the energy-threshold VAD, which is a heuristic that won't
+    /// be perfectly calibrated on every device/environment. Off means fully manual:
+    /// tap to start, tap again to stop, no auto-stop at all.
+    var autoStopOnSilence: Bool {
+        didSet { defaults.set(autoStopOnSilence, forKey: Keys.autoStopOnSilence) }
+    }
+
     var autoPunctuation: Bool {
         didSet { defaults.set(autoPunctuation, forKey: Keys.autoPunctuation) }
     }
@@ -36,6 +43,7 @@ final class AppSettings {
 
         self.languageMode = (defaults.string(forKey: Keys.languageMode)).flatMap(LanguageMode.init(rawValue:)) ?? .auto
         self.vadSensitivity = defaults.object(forKey: Keys.vadSensitivity) as? Float ?? Constants.defaultVADThreshold
+        self.autoStopOnSilence = defaults.object(forKey: Keys.autoStopOnSilence) as? Bool ?? true
         self.autoPunctuation = defaults.object(forKey: Keys.autoPunctuation) as? Bool ?? true
         self.maxRecordDurationSeconds = defaults.object(forKey: Keys.maxRecordDuration) as? Int ?? Int(Constants.chunkDurationSeconds)
     }
@@ -43,6 +51,7 @@ final class AppSettings {
     private enum Keys {
         static let languageMode = "settings.languageMode"
         static let vadSensitivity = "settings.vadSensitivity"
+        static let autoStopOnSilence = "settings.autoStopOnSilence"
         static let autoPunctuation = "settings.autoPunctuation"
         static let maxRecordDuration = "settings.maxRecordDuration"
     }

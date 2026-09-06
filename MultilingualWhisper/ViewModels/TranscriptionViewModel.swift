@@ -73,7 +73,7 @@ final class TranscriptionViewModel {
                 return
             }
             do {
-                audioService.vadEnabled = true
+                audioService.vadEnabled = settings.autoStopOnSilence
                 audioService.vadThreshold = settings.vadSensitivity
                 try audioService.startRecording { [weak self] in
                     // `evaluateVAD` already runs on the main actor, but hopping through

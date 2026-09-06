@@ -55,6 +55,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.languageMode, .auto)
         XCTAssertEqual(settings.vadSensitivity, Constants.defaultVADThreshold)
         XCTAssertTrue(settings.autoPunctuation)
+        XCTAssertTrue(settings.autoStopOnSilence)
     }
 
     func testChangesPersistAcrossInstances() {

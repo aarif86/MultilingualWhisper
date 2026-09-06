@@ -38,11 +38,15 @@ struct SettingsView: View {
                     Text("Models are downloaded once and used fully offline afterwards.")
                 }
 
-                Section("Recording Settings") {
+                Section {
+                    Toggle("Auto-stop when silent", isOn: $viewModel.autoStopOnSilence)
+
                     VStack(alignment: .leading) {
-                        Text("VAD Sensitivity")
+                        Text("Auto-stop sensitivity")
                         Slider(value: $viewModel.vadSensitivity, in: 0...1)
                     }
+                    .disabled(!viewModel.autoStopOnSilence)
+                    .foregroundStyle(viewModel.autoStopOnSilence ? .primary : .secondary)
 
                     Toggle("Auto-punctuation", isOn: $viewModel.autoPunctuation)
 
@@ -52,6 +56,10 @@ struct SettingsView: View {
                         in: 10...60,
                         step: 5
                     )
+                } header: {
+                    Text("Recording Settings")
+                } footer: {
+                    Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
                 }
 
                 Section("Data Management") {

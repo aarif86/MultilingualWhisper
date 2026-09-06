@@ -25,7 +25,8 @@ targets:
     info:
       path: Generated/Info.plist
       properties:
-        NSMicrophoneUsageDescription: "Multilingual Whisper needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
+        CFBundleDisplayName: "Nasar Flow"
+        NSMicrophoneUsageDescription: "Nasar Flow needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
         CFBundleShortVersionString: "1.0.0"

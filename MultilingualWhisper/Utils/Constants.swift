@@ -9,7 +9,12 @@ enum Constants {
 
     // MARK: - App identity
 
-    static let appName = "Multilingual Whisper"
+    // Visible product name (home screen, in-app header). The underlying bundle ID,
+    // Xcode project/target, and GitHub repo stay "MultilingualWhisper" - renaming
+    // those is a bigger, riskier operation (re-registering the Apple App ID,
+    // re-issuing the provisioning profile, renaming the remote) for something end
+    // users never see, so it's deliberately left alone unless asked for.
+    static let appName = "Nasar Flow"
     static let appVersion = "1.0.0"
 
     // MARK: - Model hosting

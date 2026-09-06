@@ -27,7 +27,7 @@ private struct StubModelStore: ModelStoring {
 @MainActor
 final class WhisperServiceRoutingTests: XCTestCase {
     private func makeService(returning mock: MockWhisperEngine) -> WhisperService {
-        WhisperService(modelStore: StubModelStore(), makeEngine: { _ in mock })
+        WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { _ in mock })
     }
 
     func testForcedTranscribeUsesTheModelsOwnLanguageHint() async throws {

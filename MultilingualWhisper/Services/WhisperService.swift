@@ -51,11 +51,15 @@ final class WhisperService {
     /// fake `WhisperTranscribing` instead, so the routing logic below can run
     /// with no model file, no audio, and no device - see `WhisperServiceRoutingTests`.
     /// `customDictionary` should be the same instance Settings edits, not a fresh one -
-    /// see how `MultilingualWhisperApp` constructs and threads it.
+    /// see how `MultilingualWhisperApp` constructs and threads it. Deliberately no
+    /// default value: unlike `classifier` (a plain, non-isolated struct),
+    /// `CustomDictionaryService` is `@MainActor`-isolated, and a caller forgetting to
+    /// pass the shared instance would silently construct a second, disconnected one -
+    /// making this required forces every call site to make that choice explicitly.
     init(
         modelStore: ModelStoring,
         classifier: LanguageClassifying = RuleBasedLanguageClassifier(),
-        customDictionary: CustomDictionaryService = CustomDictionaryService(),
+        customDictionary: CustomDictionaryService,
         makeEngine: @escaping @Sendable (String) throws -> WhisperTranscribing = { try WhisperEngine(modelPath: $0) }
     ) {
         self.modelStore = modelStore

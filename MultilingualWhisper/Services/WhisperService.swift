@@ -71,6 +71,7 @@ final class WhisperService {
             throw ServiceError.modelNotDownloaded(model)
         }
 
+        DebugLogger.shared.log("loading engine for \(model.rawValue)", category: "whisper")
         let factory = makeEngine
         let task = Task.detached(priority: .userInitiated) {
             try factory(path.path)
@@ -82,9 +83,11 @@ final class WhisperService {
             engines[model] = engine
             loadingTasks[model] = nil
             loadedModels.insert(model)
+            DebugLogger.shared.log("engine loaded for \(model.rawValue)", category: "whisper")
             return engine
         } catch {
             loadingTasks[model] = nil
+            DebugLogger.shared.log("FAILED to load engine for \(model.rawValue): \(error)", category: "whisper")
             throw error
         }
     }
@@ -148,6 +151,12 @@ final class WhisperService {
             && classification.confidence >= reroutingConfidenceThreshold
             && modelStore.isDownloaded(classification.recommendedModel)
 
+        DebugLogger.shared.log(
+            "auto-route: draftTextLen=\(draftText.count) tag=\(classification.languageTag.rawValue) "
+                + "confidence=\(classification.confidence) reroute=\(shouldReroute ? classification.recommendedModel.rawValue : "no")",
+            category: "whisper"
+        )
+
         guard shouldReroute else {
             return TranscriptionResult(
                 text: draftText,
@@ -181,6 +190,31 @@ final class WhisperService {
         engine: WhisperTranscribing,
         languageHint: String?,
         initialPrompt: String? = nil
+    ) async throws -> String {
+        // The single choke point every decode (live preview and final result,
+        // every model) passes through - the most useful place to log, since a
+        // silent-failure bug report ("nothing shows up") is otherwise ambiguous
+        // between "audio capture produced nothing" and "whisper.cpp decoded to
+        // nothing" without this.
+        DebugLogger.shared.log(
+            "decode start: samples=\(samples.count) hint=\(languageHint ?? "nil") promptChars=\(initialPrompt?.count ?? 0)",
+            category: "whisper"
+        )
+        do {
+            let text = try await runChunkedUninstrumented(samples: samples, engine: engine, languageHint: languageHint, initialPrompt: initialPrompt)
+            DebugLogger.shared.log("decode done: textLen=\(text.count)", category: "whisper")
+            return text
+        } catch {
+            DebugLogger.shared.log("decode THREW: \(error)", category: "whisper")
+            throw error
+        }
+    }
+
+    private func runChunkedUninstrumented(
+        samples: [Float],
+        engine: WhisperTranscribing,
+        languageHint: String?,
+        initialPrompt: String?
     ) async throws -> String {
         let chunkSize = Int(Constants.chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {

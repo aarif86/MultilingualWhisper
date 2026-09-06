@@ -38,7 +38,12 @@ final class WhisperServiceRoutingTests: XCTestCase {
 
         let received = await mock.receivedOptions
         XCTAssertEqual(received.first?.languageHint, "en")
-        XCTAssertEqual(received.first?.initialPrompt, Constants.singlishInitialPrompt)
+        // Asserts against the model's own property rather than a hardcoded value,
+        // so this stays correct whether initialPrompt priming is on or (as of
+        // 2026-09-06, pending a real-device investigation) temporarily disabled -
+        // what matters here is that WhisperService threads through whatever the
+        // model says, not which specific prompt value that currently is.
+        XCTAssertEqual(received.first?.initialPrompt, WhisperModelType.singlish.initialPrompt)
     }
 
     func testAutoRoutingDraftPassUsesTheSameHintAsAForcedTranscribe() async throws {

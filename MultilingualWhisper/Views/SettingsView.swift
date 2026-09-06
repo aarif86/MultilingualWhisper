@@ -6,6 +6,14 @@ struct SettingsView: View {
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
     @State private var showClearAllConfirmation = false
+    // Toggled after clearing the debug log to force `hasDebugLog` to
+    // re-evaluate - SwiftUI has no other reason to know the file on disk changed.
+    @State private var debugLogRefreshTrigger = false
+
+    private var hasDebugLog: Bool {
+        _ = debugLogRefreshTrigger
+        return FileManager.default.fileExists(atPath: DebugLogger.shared.fileURL.path)
+    }
 
     init(modelDownloadService: ModelDownloadService) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
@@ -74,6 +82,25 @@ struct SettingsView: View {
                         showClearAllConfirmation = true
                     }
                     .disabled(transcriptions.isEmpty)
+                }
+
+                Section {
+                    ShareLink(item: DebugLogger.shared.fileURL) {
+                        Label("Share Debug Log", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(!hasDebugLog)
+
+                    Button("Clear Debug Log", role: .destructive) {
+                        Task {
+                            await DebugLogger.shared.clear()
+                            debugLogRefreshTrigger.toggle()
+                        }
+                    }
+                    .disabled(!hasDebugLog)
+                } header: {
+                    Text("Debug Log")
+                } footer: {
+                    Text("A local, on-device log of recording/transcription activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
                 }
 
                 Section("About") {

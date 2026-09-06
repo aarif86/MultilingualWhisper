@@ -129,10 +129,20 @@ final class AudioService {
             }
         }
 
+        let nativeFormat = input.inputFormat(forBus: 0)
+        var loggedConverterFailure = false
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
             if converter == nil {
                 converter = AVAudioConverter(from: buffer.format, to: Self.targetFormat)
+                // Would silently drop every buffer forever if this ever fails - log it
+                // once (not on every retry, since this closure runs ~10x/second on the
+                // audio render thread and `converter` never becomes non-nil to stop
+                // the retries).
+                if converter == nil, !loggedConverterFailure {
+                    loggedConverterFailure = true
+                    DebugLogger.shared.log("AVAudioConverter failed to construct from \(buffer.format)", category: "audio")
+                }
             }
             guard let converter, let converted = Self.convert(buffer, using: converter) else { return }
             continuation.yield(converted)
@@ -145,11 +155,13 @@ final class AudioService {
             input.removeTap(onBus: 0)
             continuation.finish()
             sampleContinuation = nil
+            DebugLogger.shared.log("audioEngine.start() failed: \(error)", category: "audio")
             throw error
         }
 
         isRecording = true
         recordingStartDate = Date()
+        DebugLogger.shared.log("recording started, native format=\(nativeFormat)", category: "audio")
     }
 
     @discardableResult
@@ -166,6 +178,7 @@ final class AudioService {
         isRecording = false
         recordingStartDate = nil
         onAutoStop = nil
+        DebugLogger.shared.log("recording stopped, samples=\(samples.count)", category: "audio")
         return samples
     }
 
@@ -200,6 +213,7 @@ final class AudioService {
             if let start = silenceStartDate,
                Date().timeIntervalSince(start) > silenceTimeout,
                elapsed > 0.5 {
+                DebugLogger.shared.log("VAD auto-stop fired at elapsed=\(elapsed) samples=\(samples.count)", category: "audio")
                 let callback = onAutoStop
                 stopRecording()
                 callback?()

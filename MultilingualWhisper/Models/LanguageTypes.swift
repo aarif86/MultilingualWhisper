@@ -48,13 +48,19 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     }
 
     /// Seeds whisper.cpp's `initial_prompt` for this model - see `Constants` for
-    /// why. `nil` for the plain English/general-purpose fallback models, which
-    /// don't need biasing toward Singlish/Malay/Arabic-specific vocabulary.
+    /// the idea. **Temporarily disabled (always nil)**: shipping this alongside
+    /// a real-device report of "nothing shows up at all" - a much bigger,
+    /// stranger failure than an accuracy tweak should ever cause - and it's the
+    /// one change in that build that was already flagged as unverified and that
+    /// exercises genuinely new native decoder behavior (these custom-converted
+    /// models had *never* been run with a non-nil initial_prompt before). Not
+    /// confirmed as the actual cause yet - re-enable (return
+    /// `Constants.singlishInitialPrompt` / `arabicInitialPrompt` again) only
+    /// after the debug log from a real device points elsewhere, or after
+    /// deliberately re-testing this in isolation.
     var initialPrompt: String? {
         switch self {
-        case .singlish: return Constants.singlishInitialPrompt
-        case .arabic: return Constants.arabicInitialPrompt
-        case .english, .multilingual: return nil
+        case .singlish, .arabic, .english, .multilingual: return nil
         }
     }
 

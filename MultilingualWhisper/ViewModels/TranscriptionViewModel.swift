@@ -115,7 +115,9 @@ final class TranscriptionViewModel {
                 clearTranscript()
                 phase = .recording
                 startLiveUpdates()
+                DebugLogger.shared.log("recording started", category: "viewmodel")
             } catch {
+                DebugLogger.shared.log("startRecording failed: \(error)", category: "viewmodel")
                 phase = .error(error.localizedDescription)
             }
         }
@@ -149,9 +151,16 @@ final class TranscriptionViewModel {
         defer { isLiveTranscribing = false }
 
         let model = settings.languageMode.pinnedModel ?? .singlish
-        guard let result = try? await whisperService.transcribe(samples: snapshot, using: model) else { return }
-        guard isRecording else { return } // stopped for real while this was running
-        transcript = applyPunctuationPreference(to: result.text)
+        do {
+            let result = try await whisperService.transcribe(samples: snapshot, using: model)
+            guard isRecording else { return } // stopped for real while this was running
+            transcript = applyPunctuationPreference(to: result.text)
+        } catch {
+            // Deliberately not surfaced to the user (see doc comment above) - but
+            // logged, since a transient failure here that keeps happening would
+            // otherwise look identical to "nothing is being captured at all".
+            DebugLogger.shared.log("live update failed: \(error)", category: "viewmodel")
+        }
     }
 
     private func stopAndTranscribe() {
@@ -165,6 +174,9 @@ final class TranscriptionViewModel {
         liveUpdateTask = nil
         let samples = audioService.stopRecording()
         let duration = recordingElapsed
+        // Distinguishes "audio capture produced nothing" from "whisper decoded
+        // the captured audio to nothing" - otherwise identical from the outside.
+        DebugLogger.shared.log("stopAndTranscribe: samples=\(samples.count) duration=\(duration)", category: "viewmodel")
         phase = .transcribing
 
         Task {
@@ -192,6 +204,7 @@ final class TranscriptionViewModel {
 
                 saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration)
             } catch {
+                DebugLogger.shared.log("stopAndTranscribe failed: \(error)", category: "viewmodel")
                 phase = .error(error.localizedDescription)
             }
         }

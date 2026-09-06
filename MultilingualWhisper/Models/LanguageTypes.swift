@@ -8,6 +8,7 @@ import Foundation
 /// picker and the transcription engine would drift), not a feature.
 enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     case singlish
+    case malay
     case arabic
     case english
     case multilingual
@@ -17,6 +18,7 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     var displayName: String {
         switch self {
         case .singlish: return "Singlish Model"
+        case .malay: return "Malay Model"
         case .arabic: return "Arabic Model"
         case .english: return "English Model"
         case .multilingual: return "Multilingual Model"
@@ -27,13 +29,14 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     var localFileName: String {
         switch self {
         case .singlish: return "ggml-small-singlish.bin"
+        case .malay: return "ggml-small-malay.bin"
         case .arabic: return "ggml-small-arabic.bin"
         case .english: return "ggml-small.en.bin"
         case .multilingual: return "ggml-small.bin"
         }
     }
 
-    /// Language hint passed to whisper_full_params.language. All four models
+    /// Language hint passed to whisper_full_params.language. All five models
     /// here are fine-tunes/builds of the multilingual whisper-small checkpoint,
     /// so a hint measurably improves accuracy over "auto" — but this is only
     /// a *hint*: whisper.cpp will still emit whatever script it decodes.
@@ -41,6 +44,7 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     var languageHint: String? {
         switch self {
         case .singlish: return "en"
+        case .malay: return "ms"
         case .arabic: return "ar"
         case .english: return "en"
         case .multilingual: return nil
@@ -60,7 +64,7 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
     /// deliberately re-testing this in isolation.
     var initialPrompt: String? {
         switch self {
-        case .singlish, .arabic, .english, .multilingual: return nil
+        case .singlish, .malay, .arabic, .english, .multilingual: return nil
         }
     }
 
@@ -71,8 +75,9 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
 
 /// Language tag stored on each saved Transcription, for display/filtering in History.
 /// This is a *label*, distinct from WhisperModelType (which model produced the text) —
-/// e.g. the Singlish model can produce a transcript that's tagged `.malay` because the
-/// classifier detected Malay-dominant audio and routed accordingly.
+/// e.g. Malay embedded in otherwise Singlish speech stays on the Singlish model but is
+/// still tagged `.malay`/`.mixed`; only *dominant*, unmixed Malay actually routes to the
+/// dedicated `.malay` model. See `LanguageClassifier.swift`.
 enum LanguageType: String, Codable, CaseIterable, Identifiable {
     case singlish = "Singlish"
     case malay = "Malay"
@@ -88,6 +93,7 @@ enum LanguageType: String, Codable, CaseIterable, Identifiable {
 enum LanguageMode: String, Codable, CaseIterable, Identifiable {
     case auto = "Auto-Detect (Recommended)"
     case forceSinglish = "Force Singlish"
+    case forceMalay = "Force Malay"
     case forceArabic = "Force Arabic"
     case forceEnglish = "Force English"
     case multilingual = "Multilingual"
@@ -100,6 +106,7 @@ enum LanguageMode: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .auto: return nil
         case .forceSinglish: return .singlish
+        case .forceMalay: return .malay
         case .forceArabic: return .arabic
         case .forceEnglish: return .english
         case .multilingual: return .multilingual

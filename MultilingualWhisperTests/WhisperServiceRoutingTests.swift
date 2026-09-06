@@ -77,6 +77,18 @@ final class WhisperServiceRoutingTests: XCTestCase {
         XCTAssertEqual(result.modelUsed, .arabic)
     }
 
+    func testAutoRoutingReroutesToMalayHintWhenClassifierIsConfident() async throws {
+        let mock = MockWhisperEngine(text: "Nak pergi makan tak? Jalan sekarang.")
+        let service = makeService(returning: mock)
+
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+
+        let received = await mock.receivedOptions
+        XCTAssertEqual(received.count, 2, "should re-transcribe once the draft pass reads as confidently dominant Malay")
+        XCTAssertEqual(received.last?.languageHint, "ms")
+        XCTAssertEqual(result.modelUsed, .malay)
+    }
+
     func testAnnotationTagsAreStrippedFromTheFinalText() async throws {
         let mock = MockWhisperEngine(text: "<SPK/> hello <NON/>")
         let service = makeService(returning: mock)

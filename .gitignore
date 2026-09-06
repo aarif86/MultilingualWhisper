@@ -57,5 +57,10 @@ __pycache__/
 .venv/
 venv/
 
+# Scratch dir the convert_*_model.py scripts clone HF repos into - never
+# tracked, but never actually gitignored either until this line, so it's only
+# ever been safe by luck (nobody happened to `git add -A` while it existed).
+.model-conversion-workdir/
+
 # Logs
 *.log

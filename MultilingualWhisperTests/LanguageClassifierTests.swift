@@ -37,10 +37,14 @@ final class LanguageClassifierTests: XCTestCase {
         XCTAssertEqual(result.languageTag, .arabic)
     }
 
-    func testMalayKeywordsAreTaggedMalay() {
+    func testDominantMalayWithNoSinglishMarkersRoutesToMalayModel() {
+        // Pure/dominant Malay (no Singlish particles alongside it) routes to the
+        // dedicated Malay model, added 2026-09-07 - distinct from the embedded-
+        // loanword case below, which stays on Singlish.
         let result = classifier.classify(text: "Nak pergi makan tak? Jalan sekarang.")
-        XCTAssertEqual(result.recommendedModel, .singlish)
+        XCTAssertEqual(result.recommendedModel, .malay)
         XCTAssertEqual(result.languageTag, .malay)
+        XCTAssertEqual(result.components, [.malay])
     }
 
     func testSinglishMarkersAreTaggedSinglish() {
@@ -49,8 +53,14 @@ final class LanguageClassifierTests: XCTestCase {
         XCTAssertEqual(result.languageTag, .singlish)
     }
 
-    func testMixedMalayAndSinglishIsTaggedMixed() {
+    func testMixedMalayAndSinglishStaysOnSinglishModel() {
+        // Malay *embedded* in Singlish speech (Singlish particles present too)
+        // is a different case from dominant/pure Malay above - the Singlish
+        // model already handles embedded Malay loanwords fine, so this must NOT
+        // reroute to the dedicated Malay model, which would lose the English/
+        // Singlish majority of the clip.
         let result = classifier.classify(text: "Jalan already lah, tak boleh wait")
+        XCTAssertEqual(result.recommendedModel, .singlish)
         XCTAssertEqual(result.languageTag, .mixed)
     }
 

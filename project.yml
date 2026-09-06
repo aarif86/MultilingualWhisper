@@ -52,11 +52,18 @@ targets:
           - CFBundleURLSchemes:
               - nasarflow
             CFBundleURLName: com.multilingualwhisper.app
-    entitlements:
-      path: Generated/MultilingualWhisper.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.multilingualwhisper.app
+    # Temporarily NOT declaring the App Groups entitlement here - same reason as
+    # NasarFlowKeyboard's embed:true being commented out below: the existing
+    # "Nasar Flow" profile predates App Groups on this App ID, so it doesn't
+    # have the capability yet, and a signed archive fails immediately if the
+    # entitlements file asks for something the profile doesn't grant. Add this
+    # back (and re-embed the keyboard target) once App Groups is enabled on
+    # both App IDs and both profiles are re-generated/created (see README).
+    # entitlements:
+    #   path: Generated/MultilingualWhisper.entitlements
+    #   properties:
+    #     com.apple.security.application-groups:
+    #       - group.com.multilingualwhisper.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.multilingualwhisper.app

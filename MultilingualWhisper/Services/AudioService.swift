@@ -47,6 +47,8 @@ final class AudioService {
     private var recordingStartDate: Date?
     private var silenceStartDate: Date?
     private var onAutoStop: (() -> Void)?
+    private var sampleStreamTask: Task<Void, Never>?
+    private var sampleContinuation: AsyncStream<(chunk: [Float], rms: Float)>.Continuation?
 
     // `nonisolated(unsafe)`: read-only after init, and accessed from `convert` below,
     // which deliberately runs off the main actor (on the audio render thread) - a
@@ -98,16 +100,33 @@ final class AudioService {
         // buffer - so it can never mismatch what's really being captured.
         var converter: AVAudioConverter?
 
+        // Audio taps fire roughly every 80-100ms on a dedicated real-time thread.
+        // Spawning an independent `Task { @MainActor in ... }` per callback (the
+        // previous approach) does NOT guarantee those tasks run in the order they
+        // were created once several are in flight - which, for something that
+        // appends sequential audio chunks to a growing buffer, can silently
+        // reorder samples into something that no longer sounds like speech at all
+        // to Whisper (it doesn't crash; it just transcribes to nothing, or garbage).
+        // AsyncStream guarantees delivery in yield order, which a scattered `Task {}`
+        // per callback does not - so every chunk funnels through one continuation
+        // into one single long-lived consuming task instead.
+        let (stream, continuation) = AsyncStream<(chunk: [Float], rms: Float)>.makeStream()
+        sampleContinuation?.finish()
+        sampleContinuation = continuation
+        sampleStreamTask?.cancel()
+        sampleStreamTask = Task { @MainActor [weak self] in
+            for await (chunk, rms) in stream {
+                self?.ingest(chunk: chunk, rms: rms)
+            }
+        }
+
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
             if converter == nil {
                 converter = AVAudioConverter(from: buffer.format, to: Self.targetFormat)
             }
             guard let converter, let converted = Self.convert(buffer, using: converter) else { return }
-            let (chunk, rms) = converted
-            Task { @MainActor in
-                self?.ingest(chunk: chunk, rms: rms)
-            }
+            continuation.yield(converted)
         }
 
         audioEngine.prepare()
@@ -115,6 +134,8 @@ final class AudioService {
             try audioEngine.start()
         } catch {
             input.removeTap(onBus: 0)
+            continuation.finish()
+            sampleContinuation = nil
             throw error
         }
 
@@ -128,6 +149,11 @@ final class AudioService {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Ends the stream so the consuming Task in startRecording finishes on its
+        // own rather than being left running: everything already yielded is still
+        // delivered in order first, .finish() just stops new values afterwards.
+        sampleContinuation?.finish()
+        sampleContinuation = nil
         isRecording = false
         recordingStartDate = nil
         onAutoStop = nil

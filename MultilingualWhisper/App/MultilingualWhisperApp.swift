@@ -8,6 +8,7 @@ struct MultilingualWhisperApp: App {
     @State private var audioService = AudioService()
     @State private var modelDownloadService: ModelDownloadService
     @State private var whisperService: WhisperService
+    @State private var quickDictateActive = false
 
     init() {
         // whisperService depends on modelDownloadService (it asks it "is X downloaded,
@@ -23,8 +24,17 @@ struct MultilingualWhisperApp: App {
             ContentView(
                 audioService: audioService,
                 whisperService: whisperService,
-                modelDownloadService: modelDownloadService
+                modelDownloadService: modelDownloadService,
+                quickDictateActive: $quickDictateActive
             )
+            // The keyboard extension launches nasarflow://dictate (Full Access
+            // required for a keyboard to open a URL at all) when its Dictate
+            // button is tapped - see DictationHandoff.swift and NasarFlowKeyboard/.
+            .onOpenURL { url in
+                guard url.scheme == DictationHandoff.urlScheme,
+                      url.host == DictationHandoff.dictateHost else { return }
+                quickDictateActive = true
+            }
         }
         .modelContainer(modelContainer)
     }

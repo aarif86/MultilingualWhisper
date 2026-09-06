@@ -92,8 +92,16 @@ targets:
       # ever copies the actual dylib into the app bundle's Frameworks/ folder.
       - framework: vendor/whisper.cpp/build-apple/whisper.xcframework
         embed: true
-      - target: NasarFlowKeyboard
-        embed: true
+      # Temporarily NOT embedded: release.yml needs a second provisioning
+      # profile ("Nasar Flow Keyboard") that doesn't exist in Apple's portal
+      # yet (see README's "Keyboard extension" section for the setup steps).
+      # Embedding it here would make every release fail at signing until that's
+      # done, which would needlessly block shipping unrelated fixes in the
+      # meantime. Re-add `embed: true` once that secret/profile exists - the
+      # NasarFlowKeyboard target itself, and all its code, stays fully intact
+      # either way; this line is the only thing gating it out of a release build.
+      # - target: NasarFlowKeyboard
+      #   embed: true
     scheme:
       testTargets:
         - MultilingualWhisperTests

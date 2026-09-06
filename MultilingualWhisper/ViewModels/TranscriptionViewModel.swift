@@ -166,7 +166,13 @@ final class TranscriptionViewModel {
                 }
 
                 let finalText = applyPunctuationPreference(to: result.text)
-                transcript = finalText
+                // An empty final decode would otherwise silently wipe out whatever
+                // the live preview already showed on screen ("like it never
+                // existed") - only ever replace visible text with something new,
+                // never with nothing.
+                if !finalText.isEmpty {
+                    transcript = finalText
+                }
                 lastModelUsed = result.modelUsed
                 lastLanguageTag = result.languageTag
                 lastDuration = duration

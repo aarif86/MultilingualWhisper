@@ -105,7 +105,16 @@ final class WhisperService {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
 
         let firstEngine = try await loadEngine(for: defaultModel)
-        let draftText = try await runChunked(samples: samples, engine: firstEngine, languageHint: nil)
+        // Force the same language hint the live preview already used for this
+        // model (previously `nil`, i.e. let whisper.cpp auto-detect the language
+        // from scratch) - nothing ever consumed that auto-detected language, and
+        // auto-detect on short or code-switched audio is exactly the kind of
+        // thing that can flip to an unexpected language mid-clip and decode very
+        // differently from the same audio's forced-hint pass. That divergence is
+        // what made the live preview show real text while the final result came
+        // back empty/garbled on stop - forcing the same hint keeps both passes
+        // consistent.
+        let draftText = try await runChunked(samples: samples, engine: firstEngine, languageHint: defaultModel.languageHint)
         let classification = classifier.classify(text: draftText)
 
         let shouldReroute = classification.recommendedModel != defaultModel
@@ -156,8 +165,23 @@ final class WhisperService {
 
     private func joined(_ segments: [WhisperEngine.Segment]) -> String {
         segments
-            .map { $0.text.trimmingCharacters(in: .whitespaces) }
+            .map { stripAnnotationTags($0.text).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+
+    /// The Singlish fine-tune (jensenlwt/whisper-small-singlish-122k) was trained
+    /// on IMDA National Speech Corpus transcripts, which mark unclear speech and
+    /// non-verbal sounds with literal tags (`<SPK/>`, `<NON/>`, etc.) baked
+    /// directly into the target text - so the model reproduces them as ordinary
+    /// output text, not as tokenizer-level special tokens whisper.cpp could
+    /// filter at decode time. Strip them here, before anything reaches the UI or
+    /// history, rather than in every call site.
+    private static let annotationTagPattern = try! NSRegularExpression(pattern: "<[A-Za-z]+/?>")
+
+    private func stripAnnotationTags(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let stripped = Self.annotationTagPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        return stripped.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
     }
 }

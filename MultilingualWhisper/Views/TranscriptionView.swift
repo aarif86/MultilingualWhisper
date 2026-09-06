@@ -42,6 +42,14 @@ struct TranscriptionView: View {
             .padding()
             .navigationTitle(Constants.appName)
             .alert("Something went wrong", isPresented: errorBinding, presenting: errorMessage) { _ in
+                if viewModel.microphonePermissionDenied {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                        viewModel.dismissError()
+                    }
+                }
                 Button("OK", role: .cancel) { viewModel.dismissError() }
             } message: { message in
                 Text(message)

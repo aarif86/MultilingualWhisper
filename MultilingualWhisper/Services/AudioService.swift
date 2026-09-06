@@ -69,6 +69,15 @@ final class AudioService {
         }
     }
 
+    /// iOS only ever shows the system permission prompt once - after a denial,
+    /// requestPermission() just silently resolves to false forever after, with
+    /// no further UI. Checking this lets the caller distinguish "never asked
+    /// yet" from "already said no", so it can point the user at Settings
+    /// instead of repeating a request that can't possibly succeed.
+    var isPermissionDenied: Bool {
+        AVAudioApplication.shared.recordPermission == .denied
+    }
+
     func startRecording(onAutoStop: (() -> Void)? = nil) throws {
         guard !isRecording else { throw AudioServiceError.alreadyRecording }
         guard AVAudioApplication.shared.recordPermission == .granted else {

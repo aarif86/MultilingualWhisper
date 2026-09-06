@@ -18,6 +18,11 @@ final class TranscriptionViewModel {
     private(set) var lastModelUsed: WhisperModelType?
     private(set) var lastLanguageTag: LanguageType?
     private(set) var lastDuration: TimeInterval = 0
+    /// Set when the current `.error` phase is specifically an already-denied mic
+    /// permission (as opposed to any other failure) - lets the view offer a direct
+    /// link to Settings instead of just an "OK" button, since re-requesting can't
+    /// possibly work once denied (iOS only shows that system prompt once, ever).
+    private(set) var microphonePermissionDenied = false
 
     var isRecording: Bool { audioService.isRecording }
     var recordingLevel: Float { audioService.currentLevel }
@@ -69,11 +74,23 @@ final class TranscriptionViewModel {
     private func startRecording(modelContext: ModelContext) {
         activeModelContext = modelContext
         Task {
+            // Once denied, requestPermission() just silently resolves false again
+            // forever - no system UI, no way for the user to retry from inside the
+            // app. Short-circuit straight to "go to Settings" instead of repeating
+            // a request that's guaranteed to fail the same way.
+            if audioService.isPermissionDenied {
+                microphonePermissionDenied = true
+                phase = .error("Microphone access is denied. Enable it in Settings to record.")
+                return
+            }
+
             let granted = await audioService.requestPermission()
             guard granted else {
+                microphonePermissionDenied = audioService.isPermissionDenied
                 phase = .error("Microphone access is required to record. Enable it in Settings.")
                 return
             }
+            microphonePermissionDenied = false
             do {
                 audioService.vadEnabled = settings.autoStopOnSilence
                 audioService.vadThreshold = settings.vadSensitivity

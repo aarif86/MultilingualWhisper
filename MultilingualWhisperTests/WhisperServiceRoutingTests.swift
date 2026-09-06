@@ -38,6 +38,7 @@ final class WhisperServiceRoutingTests: XCTestCase {
 
         let received = await mock.receivedOptions
         XCTAssertEqual(received.first?.languageHint, "en")
+        XCTAssertEqual(received.first?.initialPrompt, Constants.singlishInitialPrompt)
     }
 
     func testAutoRoutingDraftPassUsesTheSameHintAsAForcedTranscribe() async throws {

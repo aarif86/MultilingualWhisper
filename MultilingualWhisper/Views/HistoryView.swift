@@ -6,6 +6,10 @@ struct HistoryView: View {
     @Query(sort: \Transcription.date, order: .reverse) private var transcriptions: [Transcription]
     @State private var viewModel = HistoryViewModel()
     @State private var showDeleteAllConfirmation = false
+    // Stateless - recomputing the language breakdown from saved text at display
+    // time (rather than persisting it) means History always reflects the
+    // current classifier logic, and needs no SwiftData schema change.
+    private let classifier = RuleBasedLanguageClassifier()
 
     var body: some View {
         NavigationStack {
@@ -74,6 +78,10 @@ struct HistoryView: View {
         }
     }
 
+    private func languageComponents(for transcription: Transcription) -> [LanguageType] {
+        classifier.classify(text: transcription.text).components
+    }
+
     private func row(for transcription: Transcription) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(transcription.text)
@@ -82,7 +90,7 @@ struct HistoryView: View {
             HStack(spacing: 6) {
                 Text(transcription.date, format: .dateTime.hour().minute())
                 Text("· \(Int(transcription.duration))s ·")
-                LanguageBadge(language: transcription.languageUsed)
+                LanguageBadge(language: transcription.languageUsed, components: languageComponents(for: transcription))
             }
             .font(.caption)
             .foregroundStyle(.secondary)

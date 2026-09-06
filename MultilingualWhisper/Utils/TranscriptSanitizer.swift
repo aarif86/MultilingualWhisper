@@ -20,6 +20,7 @@ enum TranscriptSanitizer {
     static func stripAnnotationTags(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         let stripped = annotationTagPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "")
-        return stripped.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        let collapsed = stripped.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        return collapsed.trimmingCharacters(in: .whitespaces)
     }
 }

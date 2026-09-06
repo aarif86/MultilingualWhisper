@@ -47,6 +47,17 @@ enum WhisperModelType: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Seeds whisper.cpp's `initial_prompt` for this model - see `Constants` for
+    /// why. `nil` for the plain English/general-purpose fallback models, which
+    /// don't need biasing toward Singlish/Malay/Arabic-specific vocabulary.
+    var initialPrompt: String? {
+        switch self {
+        case .singlish: return Constants.singlishInitialPrompt
+        case .arabic: return Constants.arabicInitialPrompt
+        case .english, .multilingual: return nil
+        }
+    }
+
     var remoteURL: URL? { Constants.modelRemoteURLs[self] }
     var expectedChecksum: String? { Constants.modelChecksums[self] }
     var approxSizeBytes: Int64 { Constants.modelApproxSizeBytes[self] ?? 0 }

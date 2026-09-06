@@ -85,6 +85,24 @@ enum Constants {
         "akhi", "ukhti", "ameen", "amin",
     ]
 
+    /// Seeds whisper.cpp's decoder context (`initial_prompt`) so it's primed
+    /// toward the exact colloquial vocabulary flow.nasar.sg advertises the app
+    /// catching, instead of "correcting" unfamiliar slang toward standard
+    /// English. A short, natural-sounding sentence biases both vocabulary and
+    /// speaking style more effectively than a bare word list - deliberately
+    /// written in the same code-switched style as the site's own demo phrases
+    /// ("Bismillah, let's go makan lah" / "Wah shiok sia, we go makan then
+    /// balik house"). Tradeoff worth knowing: priming can also make the decoder
+    /// lean towards inserting one of these words in genuinely ambiguous audio -
+    /// this needs real on-device testing to confirm it's a net win, not just
+    /// code review.
+    static let singlishInitialPrompt = "Wah shiok already lah, jalan jalan cari makan then balik house. Bismillah, insyaAllah can one."
+
+    /// Same idea as `singlishInitialPrompt`, for the dedicated Arabic model -
+    /// a short colloquial (not Quranic/MSA) religious phrase to bias it toward
+    /// dialectal Arabic rather than Modern Standard Arabic.
+    static let arabicInitialPrompt = "بسم الله الرحمن الرحيم، ان شاء الله، ما شاء الله."
+
     static let malayKeywords: Set<String> = [
         "makan", "minum", "jalan", "kampung", "balik", "pergi", "datang",
         "sudah", "belum", "tolong", "terima", "kasih", "selamat", "boleh",

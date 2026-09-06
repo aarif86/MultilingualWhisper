@@ -34,6 +34,7 @@ final class WhisperService {
         let text: String
         let modelUsed: WhisperModelType
         let languageTag: LanguageType
+        let languageComponents: [LanguageType]
     }
 
     private(set) var loadedModels: Set<WhisperModelType> = []
@@ -98,9 +99,19 @@ final class WhisperService {
     func transcribe(samples: [Float], using model: WhisperModelType) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
         let engine = try await loadEngine(for: model)
-        let text = try await runChunked(samples: samples, engine: engine, languageHint: model.languageHint)
+        let text = try await runChunked(
+            samples: samples,
+            engine: engine,
+            languageHint: model.languageHint,
+            initialPrompt: model.initialPrompt
+        )
         let classification = classifier.classify(text: text)
-        return TranscriptionResult(text: text, modelUsed: model, languageTag: classification.languageTag)
+        return TranscriptionResult(
+            text: text,
+            modelUsed: model,
+            languageTag: classification.languageTag,
+            languageComponents: classification.components
+        )
     }
 
     /// Two-pass auto routing used by Settings' "Auto-Detect" mode: transcribe once
@@ -125,7 +136,12 @@ final class WhisperService {
         // what made the live preview show real text while the final result came
         // back empty/garbled on stop - forcing the same hint keeps both passes
         // consistent.
-        let draftText = try await runChunked(samples: samples, engine: firstEngine, languageHint: defaultModel.languageHint)
+        let draftText = try await runChunked(
+            samples: samples,
+            engine: firstEngine,
+            languageHint: defaultModel.languageHint,
+            initialPrompt: defaultModel.initialPrompt
+        )
         let classification = classifier.classify(text: draftText)
 
         let shouldReroute = classification.recommendedModel != defaultModel
@@ -133,19 +149,26 @@ final class WhisperService {
             && modelStore.isDownloaded(classification.recommendedModel)
 
         guard shouldReroute else {
-            return TranscriptionResult(text: draftText, modelUsed: defaultModel, languageTag: classification.languageTag)
+            return TranscriptionResult(
+                text: draftText,
+                modelUsed: defaultModel,
+                languageTag: classification.languageTag,
+                languageComponents: classification.components
+            )
         }
 
         let betterEngine = try await loadEngine(for: classification.recommendedModel)
         let finalText = try await runChunked(
             samples: samples,
             engine: betterEngine,
-            languageHint: classification.recommendedModel.languageHint
+            languageHint: classification.recommendedModel.languageHint,
+            initialPrompt: classification.recommendedModel.initialPrompt
         )
         return TranscriptionResult(
             text: finalText,
             modelUsed: classification.recommendedModel,
-            languageTag: classification.languageTag
+            languageTag: classification.languageTag,
+            languageComponents: classification.components
         )
     }
 
@@ -153,10 +176,18 @@ final class WhisperService {
     /// memory-optimization requirement, and stitches the text back together.
     /// whisper.cpp can decode longer clips in one call internally, but capping the
     /// window bounds peak memory on older/smaller devices.
-    private func runChunked(samples: [Float], engine: WhisperTranscribing, languageHint: String?) async throws -> String {
+    private func runChunked(
+        samples: [Float],
+        engine: WhisperTranscribing,
+        languageHint: String?,
+        initialPrompt: String? = nil
+    ) async throws -> String {
         let chunkSize = Int(Constants.chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {
-            let segments = try await engine.transcribe(samples: samples, options: .init(languageHint: languageHint))
+            let segments = try await engine.transcribe(
+                samples: samples,
+                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
+            )
             return joined(segments)
         }
 
@@ -166,7 +197,7 @@ final class WhisperService {
             let end = min(start + chunkSize, samples.count)
             let segments = try await engine.transcribe(
                 samples: Array(samples[start..<end]),
-                options: .init(languageHint: languageHint)
+                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
             )
             pieces.append(joined(segments))
             start = end
@@ -176,7 +207,7 @@ final class WhisperService {
 
     private func joined(_ segments: [WhisperEngine.Segment]) -> String {
         segments
-            .map { TranscriptSanitizer.stripAnnotationTags($0.text).trimmingCharacters(in: .whitespaces) }
+            .map { TranscriptSanitizer.stripAnnotationTags($0.text) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
     }

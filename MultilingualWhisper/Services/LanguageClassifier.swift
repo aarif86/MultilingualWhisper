@@ -6,6 +6,13 @@ struct LanguageClassification: Equatable {
     let languageTag: LanguageType
     /// 0...1. Deliberately coarse — this is a heuristic, not a calibrated probability.
     let confidence: Float
+    /// Which specific languages were actually detected, in a fixed display order
+    /// (Arabic, Malay, Singlish, English) - e.g. `[.arabic, .malay, .singlish]` for
+    /// "Bismillah, let's go makan lah". Empty only when `languageTag == .unknown`.
+    /// Exists so a badge can show "Arabic + Malay + Singlish" instead of a generic
+    /// "Mixed" when that's literally what's being spoken - code-switching is the
+    /// whole point of this app, not an edge case to flatten into one word.
+    let components: [LanguageType]
 }
 
 protocol LanguageClassifying {
@@ -36,7 +43,7 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
     func classify(text: String) -> LanguageClassification {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return LanguageClassification(recommendedModel: .singlish, languageTag: .unknown, confidence: 0)
+            return LanguageClassification(recommendedModel: .singlish, languageTag: .unknown, confidence: 0, components: [])
         }
 
         let scalars = trimmed.unicodeScalars
@@ -52,13 +59,21 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
         let singlishHits = words.intersection(Constants.singlishMarkers).count
         let arabicPhraseHits = Constants.arabicKeywords.filter { trimmed.contains($0) }.count
         let romanizedArabicHits = words.intersection(Constants.romanizedArabicMarkers).count
+        let hasArabic = arabicScalarCount > 0 || arabicPhraseHits > 0 || romanizedArabicHits > 0
+
+        var components: [LanguageType] = []
+        if hasArabic { components.append(.arabic) }
+        if malayHits > 0 { components.append(.malay) }
+        if singlishHits > 0 { components.append(.singlish) }
+        if components.isEmpty { components.append(.english) }
 
         // Audio that's dominantly Arabic script: route to the Arabic model outright.
         if arabicRatio > 0.4 {
             return LanguageClassification(
                 recommendedModel: .arabic,
                 languageTag: .arabic,
-                confidence: min(1, 0.55 + arabicRatio)
+                confidence: min(1, 0.55 + arabicRatio),
+                components: components
             )
         }
 
@@ -68,24 +83,39 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
         // Covers both actual Arabic script and its common Latin transliterations,
         // since a model hinted to decode in Latin script will render "Bismillah"
         // as exactly that, not as بسم الله.
-        if arabicScalarCount > 0 || arabicPhraseHits > 0 || romanizedArabicHits > 0 {
+        if hasArabic {
             let tag: LanguageType = (malayHits > 0 || singlishHits > 0) ? .mixed : .arabic
-            return LanguageClassification(recommendedModel: .singlish, languageTag: tag, confidence: 0.55)
+            return LanguageClassification(recommendedModel: .singlish, languageTag: tag, confidence: 0.55, components: components)
         }
 
         if malayHits > 0 && singlishHits > 0 {
-            return LanguageClassification(recommendedModel: .singlish, languageTag: .mixed, confidence: min(1, 0.4 + Float(malayHits + singlishHits) * 0.1))
+            return LanguageClassification(
+                recommendedModel: .singlish,
+                languageTag: .mixed,
+                confidence: min(1, 0.4 + Float(malayHits + singlishHits) * 0.1),
+                components: components
+            )
         }
 
         if malayHits > 0 {
-            return LanguageClassification(recommendedModel: .singlish, languageTag: .malay, confidence: min(1, 0.4 + Float(malayHits) * 0.15))
+            return LanguageClassification(
+                recommendedModel: .singlish,
+                languageTag: .malay,
+                confidence: min(1, 0.4 + Float(malayHits) * 0.15),
+                components: components
+            )
         }
 
         if singlishHits > 0 {
-            return LanguageClassification(recommendedModel: .singlish, languageTag: .singlish, confidence: min(1, 0.4 + Float(singlishHits) * 0.15))
+            return LanguageClassification(
+                recommendedModel: .singlish,
+                languageTag: .singlish,
+                confidence: min(1, 0.4 + Float(singlishHits) * 0.15),
+                components: components
+            )
         }
 
-        return LanguageClassification(recommendedModel: .singlish, languageTag: .english, confidence: 0.3)
+        return LanguageClassification(recommendedModel: .singlish, languageTag: .english, confidence: 0.3, components: components)
     }
 
     /// Arabic + Arabic Presentation Forms A/B Unicode blocks.

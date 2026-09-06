@@ -98,7 +98,7 @@ struct TranscriptionView: View {
 
             HStack {
                 if let tag = viewModel.lastLanguageTag {
-                    LanguageBadge(language: tag)
+                    LanguageBadge(language: tag, components: viewModel.lastLanguageComponents)
                 }
                 Text("\(viewModel.wordCount) words · \(Int(viewModel.lastDuration))s")
                     .font(.caption)

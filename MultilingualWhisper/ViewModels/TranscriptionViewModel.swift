@@ -17,6 +17,10 @@ final class TranscriptionViewModel {
     private(set) var transcript: String = ""
     private(set) var lastModelUsed: WhisperModelType?
     private(set) var lastLanguageTag: LanguageType?
+    /// Which specific languages made up `lastLanguageTag` when it's `.mixed` -
+    /// e.g. `[.arabic, .malay, .singlish]` - so the UI can show "Arabic + Malay
+    /// + Singlish" instead of a generic "Mixed". See `LanguageClassification`.
+    private(set) var lastLanguageComponents: [LanguageType] = []
     private(set) var lastDuration: TimeInterval = 0
     /// Set when the current `.error` phase is specifically an already-denied mic
     /// permission (as opposed to any other failure) - lets the view offer a direct
@@ -61,6 +65,7 @@ final class TranscriptionViewModel {
         transcript = ""
         lastModelUsed = nil
         lastLanguageTag = nil
+        lastLanguageComponents = []
         lastDuration = 0
         if case .error = phase { phase = .idle }
     }
@@ -102,6 +107,12 @@ final class TranscriptionViewModel {
                         self?.stopAndTranscribe()
                     }
                 }
+                // A fresh recording starts from a clean slate - previously the old
+                // transcript (and its language badge) stayed on screen through the
+                // entire next recording until the first live update or final result
+                // overwrote it, which looked like nothing was happening. It's already
+                // safely in History by this point, so nothing is lost by clearing it.
+                clearTranscript()
                 phase = .recording
                 startLiveUpdates()
             } catch {
@@ -175,6 +186,7 @@ final class TranscriptionViewModel {
                 }
                 lastModelUsed = result.modelUsed
                 lastLanguageTag = result.languageTag
+                lastLanguageComponents = result.languageComponents
                 lastDuration = duration
                 phase = .idle
 

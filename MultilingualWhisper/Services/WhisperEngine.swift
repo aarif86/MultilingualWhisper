@@ -105,3 +105,17 @@ actor WhisperEngine {
         return String(cString: cStr)
     }
 }
+
+/// What `WhisperService` actually needs from a loaded model. `WhisperEngine`
+/// conforms for real use; tests substitute a fake that returns canned text
+/// instead of running the real whisper.cpp decoder, so the *routing/plumbing*
+/// logic in `WhisperService` (which language hint each pass uses, how results
+/// get combined) can be verified in milliseconds - no model file, no audio
+/// hardware, no physical device required. Genuine transcription *accuracy*
+/// still needs a real device; this only covers the code paths around it.
+/// See `WhisperServiceRoutingTests`.
+protocol WhisperTranscribing: Sendable {
+    func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment]
+}
+
+extension WhisperEngine: WhisperTranscribing {}

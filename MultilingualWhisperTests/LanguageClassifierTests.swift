@@ -49,6 +49,16 @@ final class LanguageClassifierTests: XCTestCase {
         XCTAssertEqual(result.languageTag, .mixed)
     }
 
+    func testCodeSwitchedNarrationWithTrailingArabicPhraseStaysOnSinglishModel() {
+        // Mirrors a real bug report: several clauses of Singlish/Malay narration
+        // with just one Arabic/Islamic interjection near the end ("wallah") must
+        // not be confidently routed away to the Arabic model - that model can't
+        // handle the Singlish/Malay majority of the clip at all, and doing so
+        // silently threw away a mostly-good transcript for a much worse one.
+        let result = classifier.classify(text: "My name is Ariff already lah, jalan jalan cari makan sometimes wallah")
+        XCTAssertEqual(result.recommendedModel, .singlish)
+    }
+
     func testPlainEnglishFallsBackToLowConfidenceEnglish() {
         let result = classifier.classify(text: "The weather today is quite pleasant")
         XCTAssertEqual(result.recommendedModel, .singlish)

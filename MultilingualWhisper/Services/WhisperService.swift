@@ -40,19 +40,29 @@ final class WhisperService {
 
     private let modelStore: ModelStoring
     private let classifier: LanguageClassifying
-    private var engines: [WhisperModelType: WhisperEngine] = [:]
-    private var loadingTasks: [WhisperModelType: Task<WhisperEngine, Error>] = [:]
+    private let makeEngine: @Sendable (String) throws -> WhisperTranscribing
+    private var engines: [WhisperModelType: WhisperTranscribing] = [:]
+    private var loadingTasks: [WhisperModelType: Task<WhisperTranscribing, Error>] = [:]
 
-    init(modelStore: ModelStoring, classifier: LanguageClassifying = RuleBasedLanguageClassifier()) {
+    /// `makeEngine` defaults to constructing a real whisper.cpp-backed
+    /// `WhisperEngine` from a model file path. Tests override it to hand back a
+    /// fake `WhisperTranscribing` instead, so the routing logic below can run
+    /// with no model file, no audio, and no device - see `WhisperServiceRoutingTests`.
+    init(
+        modelStore: ModelStoring,
+        classifier: LanguageClassifying = RuleBasedLanguageClassifier(),
+        makeEngine: @escaping @Sendable (String) throws -> WhisperTranscribing = { try WhisperEngine(modelPath: $0) }
+    ) {
         self.modelStore = modelStore
         self.classifier = classifier
+        self.makeEngine = makeEngine
     }
 
     /// Loads (or returns the already-loaded) engine for a model type. Safe to
     /// call repeatedly / concurrently - concurrent callers await the same
     /// in-flight load rather than loading the same 500MB file twice.
     @discardableResult
-    func loadEngine(for model: WhisperModelType) async throws -> WhisperEngine {
+    func loadEngine(for model: WhisperModelType) async throws -> WhisperTranscribing {
         if let existing = engines[model] { return existing }
         if let inFlight = loadingTasks[model] { return try await inFlight.value }
 
@@ -60,8 +70,9 @@ final class WhisperService {
             throw ServiceError.modelNotDownloaded(model)
         }
 
+        let factory = makeEngine
         let task = Task.detached(priority: .userInitiated) {
-            try WhisperEngine(modelPath: path.path)
+            try factory(path.path)
         }
         loadingTasks[model] = task
 
@@ -142,7 +153,7 @@ final class WhisperService {
     /// memory-optimization requirement, and stitches the text back together.
     /// whisper.cpp can decode longer clips in one call internally, but capping the
     /// window bounds peak memory on older/smaller devices.
-    private func runChunked(samples: [Float], engine: WhisperEngine, languageHint: String?) async throws -> String {
+    private func runChunked(samples: [Float], engine: WhisperTranscribing, languageHint: String?) async throws -> String {
         let chunkSize = Int(Constants.chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {
             let segments = try await engine.transcribe(samples: samples, options: .init(languageHint: languageHint))
@@ -165,23 +176,8 @@ final class WhisperService {
 
     private func joined(_ segments: [WhisperEngine.Segment]) -> String {
         segments
-            .map { stripAnnotationTags($0.text).trimmingCharacters(in: .whitespaces) }
+            .map { TranscriptSanitizer.stripAnnotationTags($0.text).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-    }
-
-    /// The Singlish fine-tune (jensenlwt/whisper-small-singlish-122k) was trained
-    /// on IMDA National Speech Corpus transcripts, which mark unclear speech and
-    /// non-verbal sounds with literal tags (`<SPK/>`, `<NON/>`, etc.) baked
-    /// directly into the target text - so the model reproduces them as ordinary
-    /// output text, not as tokenizer-level special tokens whisper.cpp could
-    /// filter at decode time. Strip them here, before anything reaches the UI or
-    /// history, rather than in every call site.
-    private static let annotationTagPattern = try! NSRegularExpression(pattern: "<[A-Za-z]+/?>")
-
-    private func stripAnnotationTags(_ text: String) -> String {
-        let range = NSRange(text.startIndex..., in: text)
-        let stripped = Self.annotationTagPattern.stringByReplacingMatches(in: text, range: range, withTemplate: "")
-        return stripped.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
     }
 }

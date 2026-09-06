@@ -62,8 +62,14 @@ targets:
         # not by editing this file - that keeps this project.yml usable by anyone
         # who forks the repo without touching Apple account details in two places.
     dependencies:
+      # whisper.xcframework is a dynamic framework (a real .dylib), not a static
+      # one - confirmed the hard way, via a real TestFlight crash log: without
+      # embed:true it links fine (build/archive both succeed) but crashes
+      # instantly on launch on a real device with "DYLD 1 Library missing -
+      # Library not loaded: @rpath/whisper.framework/whisper", because nothing
+      # ever copies the actual dylib into the app bundle's Frameworks/ folder.
       - framework: vendor/whisper.cpp/build-apple/whisper.xcframework
-        embed: false
+        embed: true
     scheme:
       testTargets:
         - MultilingualWhisperTests

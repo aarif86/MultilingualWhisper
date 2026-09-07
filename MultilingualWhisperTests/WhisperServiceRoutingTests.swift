@@ -146,8 +146,10 @@ final class WhisperServiceRoutingTests: XCTestCase {
         XCTAssertEqual(result.text, "jalan")
         XCTAssertEqual(result.modelUsed, .singlish, "primary model stays the default - only the one segment rerouted, not the whole clip")
         XCTAssertEqual(result.languageComponents, [.malay])
-        XCTAssertEqual(await singlishMock.callCount, 2, "one draft decode + one language-ID probe on the segment's own audio")
-        XCTAssertEqual(await malayMock.callCount, 1, "should re-decode the segment exactly once with the better-suited model")
+        let singlishCallCount = await singlishMock.callCount
+        let malayCallCount = await malayMock.callCount
+        XCTAssertEqual(singlishCallCount, 2, "one draft decode + one language-ID probe on the segment's own audio")
+        XCTAssertEqual(malayCallCount, 1, "should re-decode the segment exactly once with the better-suited model")
     }
 
     func testSegmentReprocessingLeavesAgreeingSegmentsUntouched() async throws {
@@ -176,6 +178,7 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let result = try await service.transcribeWithAutoRouting(samples: Array(repeating: Float(0.1), count: 6_400))
 
         XCTAssertEqual(result.text, "eh")
-        XCTAssertEqual(await singlishMock.callCount, 1, "should be only the draft pass - too short to spend a probe call on")
+        let callCount = await singlishMock.callCount
+        XCTAssertEqual(callCount, 1, "should be only the draft pass - too short to spend a probe call on")
     }
 }

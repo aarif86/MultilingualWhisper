@@ -10,7 +10,9 @@ import UIKit
 final class KeyboardViewController: UIInputViewController {
 
     private var hostingController: UIHostingController<KeyboardView>?
-    private static let preferredHeight: CGFloat = 216
+    // Bumped from 216 to fit the new manual-fallback caption under the Dictate
+    // button without crowding the pending-result row when both show at once.
+    private static let preferredHeight: CGFloat = 240
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -92,23 +94,36 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     /// `UIApplication.shared.open` is unavailable to app extension targets at
-    /// compile time, and `extensionContext.open(_:completionHandler:)` -
-    /// despite compiling and running with no error - is documented as being
-    /// for Today widgets specifically. Using it from a keyboard extension is
-    /// unsupported and, confirmed on a real device, does not actually launch
-    /// the containing app. The long-standing technique that actually works
-    /// (used by essentially every shipping third-party keyboard that needs
-    /// this) is to walk the responder chain until something in it responds to
-    /// `openURL:`, then invoke it dynamically via `perform(_:with:)` - a
-    /// runtime call the compiler can't flag as extension-unavailable, unlike
-    /// a direct `UIApplication.shared.open` call or even `#selector(...)`.
+    /// compile time. `extensionContext.open(_:completionHandler:)` - confirmed
+    /// against Apple's own current documentation, not just old forum threads -
+    /// explicitly lists only the Today widget and iMessage extension points as
+    /// supporting it; keyboard extensions aren't on that list, and indeed it
+    /// compiles, runs, and does nothing when tried from one.
+    ///
+    /// The long-documented community workaround is walking the responder chain
+    /// for something that responds to `openURL:` and invoking it dynamically -
+    /// a first attempt at that (plain `perform(_:with:)`, passing the Swift
+    /// `URL` as-is) *also* did nothing on a real device, with no crash and no
+    /// error. Two changes here versus that attempt: explicitly bridging to
+    /// `NSURL` before crossing into a fully-dynamic Objective-C call (Swift's
+    /// automatic NSURL bridging is reliable for statically-typed calls, less
+    /// certain through a boxed `Any` parameter), and deferring the call by one
+    /// run loop tick via `perform(_:with:afterDelay:)` instead of calling
+    /// synchronously from inside the SwiftUI button action, since a few
+    /// real-world reports of this exact technique note the synchronous form
+    /// can be silently dropped mid-gesture-handling. If this *still* doesn't
+    /// launch the app, check the debug log for whether "found responder" even
+    /// appears - that tells us whether the chain-walk itself is the dead end,
+    /// or whether openURL: is being reached but is a no-op for this extension
+    /// point specifically (which would mean this whole approach is a dead end
+    /// on current iOS, not just this specific call).
     private func openURLViaResponderChain(_ url: URL) {
         let openURLSelector = NSSelectorFromString("openURL:")
         var responder: UIResponder? = self
         while let current = responder {
             if current.responds(to: openURLSelector) {
-                DebugLogger.shared.log("found responder \(type(of: current)) for openURL:", category: "keyboard")
-                current.perform(openURLSelector, with: url)
+                DebugLogger.shared.log("found responder \(type(of: current)) for openURL:, invoking", category: "keyboard")
+                current.perform(openURLSelector, with: url as NSURL, afterDelay: 0)
                 return
             }
             responder = current.next

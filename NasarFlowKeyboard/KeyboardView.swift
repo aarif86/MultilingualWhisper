@@ -23,13 +23,24 @@ struct KeyboardView: View {
     }
 
     private var dictateButton: some View {
-        Button(action: onDictate) {
-            Label("Dictate with Nasar Flow", systemImage: "waveform")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+        VStack(spacing: 4) {
+            Button(action: onDictate) {
+                Label("Dictate with Nasar Flow", systemImage: "waveform")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+
+            // Launching the host app from a keyboard extension is a genuinely
+            // unreliable corner of iOS - this stays usable even when that
+            // doesn't fire: switch to Nasar Flow yourself, dictate, then come
+            // back and use Insert above once there's a pending result.
+            Text("If nothing happens, open Nasar Flow yourself, dictate, then come back")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .buttonStyle(.borderedProminent)
     }
 
     private func pendingResultRow(_ text: String) -> some View {

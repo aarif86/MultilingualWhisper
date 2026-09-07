@@ -121,9 +121,18 @@ final class FlowSessionEngine {
 
     func end() {
         guard isActive else { return }
-        // publish: false never reaches any await point (see finishUtterance) -
-        // fire-and-forget is fine here, nothing meaningful to wait for.
-        if isCapturingUtterance { Task { await finishUtterance(publish: false) } }
+        // Resets isCapturingUtterance/isRecording/samples inline rather than
+        // calling finishUtterance(publish: false) - that used to be
+        // synchronous, but finishUtterance is `async` now (see the comment
+        // on handleStopSignal), and end() needs these true immediately, not
+        // on whatever later tick a fire-and-forget Task happens to run
+        // (caught by a real test: isRecording was still true right after
+        // end() returned). FlowSessionState.clear() below already covers
+        // every *shared* field finishUtterance(publish: false) would have
+        // touched, so nothing here is actually lost by not calling it.
+        isCapturingUtterance = false
+        isRecording = false
+        samples.removeAll(keepingCapacity: true)
         stopEngine()
         isActive = false
         FlowSessionState.clear()

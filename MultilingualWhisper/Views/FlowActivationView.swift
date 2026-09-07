@@ -107,7 +107,7 @@ private struct SwipeGestureIllustration: View {
 
 #Preview {
     FlowActivationView(flowSession: FlowSessionEngine(
-        whisperService: WhisperService(modelStore: ModelDownloadService()),
+        whisperService: WhisperService(modelStore: ModelDownloadService(), customDictionary: CustomDictionaryService()),
         modelContainer: PersistenceService.makeModelContainer()
     ))
 }

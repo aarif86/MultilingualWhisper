@@ -121,7 +121,9 @@ final class FlowSessionEngine {
 
     func end() {
         guard isActive else { return }
-        if isCapturingUtterance { finishUtterance(publish: false) }
+        // publish: false never reaches any await point (see finishUtterance) -
+        // fire-and-forget is fine here, nothing meaningful to wait for.
+        if isCapturingUtterance { Task { await finishUtterance(publish: false) } }
         stopEngine()
         isActive = false
         FlowSessionState.clear()
@@ -146,10 +148,17 @@ final class FlowSessionEngine {
     private func handleStopSignal() {
         DebugLogger.shared.log("FlowSession received stopUtterance, samples=\(samples.count)", category: "flow")
         guard isCapturingUtterance else { return }
-        finishUtterance(publish: true)
+        // Fire-and-forget from here: production has nothing that needs to
+        // wait for this (the eventual stateChanged notification is how the
+        // keyboard finds out) - but finishUtterance/transcribeAndPublish
+        // themselves are plain `async` rather than spawning their own
+        // internal Task, specifically so a test can `await` the same real
+        // method directly instead of racing a detached Task with no way to
+        // know when it's actually done. See the `#if DEBUG` test seams below.
+        Task { await finishUtterance(publish: true) }
     }
 
-    private func finishUtterance(publish: Bool) {
+    private func finishUtterance(publish: Bool) async {
         isCapturingUtterance = false
         isRecording = false
         let captured = samples
@@ -168,7 +177,7 @@ final class FlowSessionEngine {
             signalFailure()
             return
         }
-        transcribeAndPublish(captured, duration: duration)
+        await transcribeAndPublish(captured, duration: duration)
     }
 
     private func signalFailure() {
@@ -176,29 +185,27 @@ final class FlowSessionEngine {
         DarwinNotification.post(FlowSessionState.stateChanged)
     }
 
-    private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) {
-        Task {
-            do {
-                let result: WhisperService.TranscriptionResult
-                if let forcedModel = settings.languageMode.pinnedModel {
-                    result = try await whisperService.transcribe(samples: samples, using: forcedModel)
-                } else {
-                    result = try await whisperService.transcribeWithAutoRouting(samples: samples)
-                }
-                guard !result.text.isEmpty else {
-                    DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")
-                    signalFailure()
-                    return
-                }
-                DictationHandoff.publish(result.text)
-                UIPasteboard.general.string = result.text
-                saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration)
-                DarwinNotification.post(FlowSessionState.stateChanged)
-                DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
-            } catch {
-                DebugLogger.shared.log("FlowSession transcription failed: \(error)", category: "flow")
-                signalFailure()
+    private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) async {
+        do {
+            let result: WhisperService.TranscriptionResult
+            if let forcedModel = settings.languageMode.pinnedModel {
+                result = try await whisperService.transcribe(samples: samples, using: forcedModel)
+            } else {
+                result = try await whisperService.transcribeWithAutoRouting(samples: samples)
             }
+            guard !result.text.isEmpty else {
+                DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")
+                signalFailure()
+                return
+            }
+            DictationHandoff.publish(result.text)
+            UIPasteboard.general.string = result.text
+            saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration)
+            DarwinNotification.post(FlowSessionState.stateChanged)
+            DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
+        } catch {
+            DebugLogger.shared.log("FlowSession transcription failed: \(error)", category: "flow")
+            signalFailure()
         }
     }
 
@@ -295,3 +302,39 @@ final class FlowSessionEngine {
         return Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
     }
 }
+
+#if DEBUG
+extension FlowSessionEngine {
+    /// Test-only seams (FlowSessionEngineTests) - excluded from release
+    /// builds entirely via `#if DEBUG`, never shipped. None of these touch a
+    /// real AVAudioEngine/AVAudioSession, which can't run in CI (no
+    /// microphone hardware, no way to grant permission non-interactively) -
+    /// they exercise the Darwin-notification signal-handling state machine
+    /// directly and deterministically instead, which is exactly the class
+    /// of logic that produced two real bugs (see project memory) pure code
+    /// review didn't catch, without the timing-dependent flakiness real
+    /// notification posting or a bare sleep-and-hope would add.
+    func test_markActive() {
+        isActive = true
+        FlowSessionState.isActive = true
+    }
+
+    func test_ingest(_ chunk: [Float]) {
+        ingest(chunk)
+    }
+
+    func test_handleStartSignal() {
+        handleStartSignal()
+    }
+
+    /// Unlike production's fire-and-forget `handleStopSignal()`, this awaits
+    /// the same real `finishUtterance` directly - production doesn't need to
+    /// wait (the eventual stateChanged notification is how the keyboard
+    /// finds out), but a test asserting on the outcome needs a deterministic
+    /// way to know the async work actually finished first.
+    func test_handleStopSignalAndWait() async {
+        guard isCapturingUtterance else { return }
+        await finishUtterance(publish: true)
+    }
+}
+#endif

@@ -7,13 +7,21 @@ struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
     let customDictionaryService: CustomDictionaryService
     @State private var showClearAllConfirmation = false
-    // Toggled after clearing the debug log to force `hasDebugLog` to
-    // re-evaluate - SwiftUI has no other reason to know the file on disk changed.
-    @State private var debugLogRefreshTrigger = false
+    @State private var showKeyboardSetup = false
+    // Toggled after clearing the debug log/audio, and on every appearance of
+    // this screen, to force hasDebugLog/latestDebugAudioURL to re-evaluate -
+    // SwiftUI has no other reason to know a file written from the Transcribe
+    // tab (a different screen entirely) has appeared on disk.
+    @State private var debugRefreshTrigger = false
 
     private var hasDebugLog: Bool {
-        _ = debugLogRefreshTrigger
+        _ = debugRefreshTrigger
         return FileManager.default.fileExists(atPath: DebugLogger.shared.fileURL.path)
+    }
+
+    private var latestDebugAudioURL: URL? {
+        _ = debugRefreshTrigger
+        return DebugAudioStore.latestFile()
     }
 
     init(modelDownloadService: ModelDownloadService, customDictionaryService: CustomDictionaryService) {
@@ -30,6 +38,16 @@ struct SettingsView: View {
                             Text(mode.rawValue).tag(mode)
                         }
                     }
+                }
+
+                Section {
+                    Button {
+                        showKeyboardSetup = true
+                    } label: {
+                        Label("Set Up Keyboard", systemImage: "keyboard")
+                    }
+                } footer: {
+                    Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
                 }
 
                 Section {
@@ -105,14 +123,37 @@ struct SettingsView: View {
                     Button("Clear Debug Log", role: .destructive) {
                         Task {
                             await DebugLogger.shared.clear()
-                            debugLogRefreshTrigger.toggle()
+                            debugRefreshTrigger.toggle()
                         }
                     }
                     .disabled(!hasDebugLog)
                 } header: {
                     Text("Debug Log")
                 } footer: {
-                    Text("A local, on-device log of recording/transcription activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                    Text("A local, on-device log of recording/transcription/keyboard activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                }
+
+                Section {
+                    Toggle("Save Recordings", isOn: $viewModel.saveDebugAudio)
+
+                    if let audioURL = latestDebugAudioURL {
+                        ShareLink(item: audioURL) {
+                            Label("Share Latest Recording", systemImage: "waveform")
+                        }
+                    } else {
+                        Label("Share Latest Recording", systemImage: "waveform")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Clear Saved Recordings", role: .destructive) {
+                        DebugAudioStore.clear()
+                        debugRefreshTrigger.toggle()
+                    }
+                    .disabled(latestDebugAudioURL == nil)
+                } header: {
+                    Text("Debug Recordings")
+                } footer: {
+                    Text("Off by default. When on, keeps your last few recordings as audio files on-device (never uploaded) so a transcription problem can be checked against what you actually said, not just described. Turn this off again once you're done debugging.")
                 }
 
                 Section("About") {
@@ -123,6 +164,10 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear { debugRefreshTrigger.toggle() }
+            .sheet(isPresented: $showKeyboardSetup) {
+                KeyboardSetupView()
+            }
             .confirmationDialog(
                 "Delete all transcriptions? This can't be undone.",
                 isPresented: $showClearAllConfirmation,

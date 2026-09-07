@@ -19,13 +19,33 @@ enum Constants {
 
     // MARK: - Model hosting
     //
-    // Singlish and Arabic are this repo's own conversions, hosted as GitHub
-    // Release assets (converted 2026-09-06, verified against real whisper-cli.exe
-    // transcriptions before upload - not just a clean conversion exit code):
-    //   - Singlish: jensenlwt/whisper-small-singlish-122k
-    //   - Arabic:   oddadmix/whisper-small-arabic-dialectal (colloquial/dialectal,
+    // Singlish, Malay, and Arabic are this repo's own conversions, hosted as
+    // GitHub Release assets:
+    //   - Singlish: jensenlwt/whisper-small-singlish-122k (converted 2026-09-06)
+    //   - Malay: mesolitica/malaysian-whisper-small-v2 (converted 2026-09-07) -
+    //     from Mesolitica/malaysia-ai, trained on IMDA STT (same corpus family as
+    //     the Singlish model) plus a Malay Conversational Speech Corpus and
+    //     Malaysian YouTube/audiobook data - covers standard AND local/colloquial
+    //     Malay, matching flow.nasar.sg's "everyday Bahasa" positioning. Its
+    //     weights ship as bfloat16, which whisper.cpp's conversion script can't
+    //     read directly - see scripts/convert_malay_model.py for the float32
+    //     upcast fix-up this needed. No explicit license tag on the HF model
+    //     card itself (the org's surrounding malaya-speech toolkit is MIT) -
+    //     known, accepted for now.
+    //   - Arabic: oddadmix/whisper-small-arabic-dialectal (colloquial/dialectal,
     //     not Modern Standard/Quranic Arabic - see scripts/convert_arabic_model.py
     //     for why, and that model's own "evaluate before production use" caveat)
+    // All three were verified against real transcriptions of real audio before
+    // upload - not just a clean conversion exit code.
+    //
+    // As of 2026-09-07, all three are quantized to q5_1 (see
+    // .github/workflows/quantize-models.yml) - storage was flagged as too big
+    // (2.44GB for all 5 models). q5_1 cut each from ~487MB to ~190MB (61%
+    // smaller) with zero measurable change in transcribed text on real test
+    // audio for Malay and Arabic (byte-for-byte identical output, f16 vs
+    // q5_1); Singlish wasn't independently re-confirmed due to a test-audio
+    // generation bug in that workflow run, not a model concern - same
+    // quantization operation, same architecture as the other two.
     // English and Multilingual point at whisper.cpp's own pre-converted stock
     // models - no conversion needed, but also no checksum: verifying one properly
     // means downloading the whole ~465MB file up front just to hash it, which
@@ -35,6 +55,7 @@ enum Constants {
 
     static var modelRemoteURLs: [WhisperModelType: URL] = [
         .singlish: URL(string: "https://github.com/aarif86/MultilingualWhisper/releases/download/models-v1/ggml-small-singlish.bin")!,
+        .malay: URL(string: "https://github.com/aarif86/MultilingualWhisper/releases/download/models-v1/ggml-small-malay.bin")!,
         .arabic: URL(string: "https://github.com/aarif86/MultilingualWhisper/releases/download/models-v1/ggml-small-arabic.bin")!,
         .english: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin")!,
         .multilingual: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin")!,
@@ -44,13 +65,15 @@ enum Constants {
     /// download whose hash doesn't match one listed here - a model with no entry
     /// here downloads without verification (see note above).
     static var modelChecksums: [WhisperModelType: String] = [
-        .singlish: "d509f441ce1ee5926998f34f3b95ff5dd046e050c44ccd0d8e85c945acaf6801",
-        .arabic: "d4a1ffc77291ee24bc3fae9d3801b38006ef40f4ae6ce86b070e0de33bd258ba",
+        .singlish: "565bb08506901ac97ca4c491da8c4f95eddb3a1230a5c7f25e44f9361aedf2c8",
+        .malay: "a5fbd9a92f8104e3ea4e0c33475c48f69e5b9566054ea0e3f71b76db5e92d86c",
+        .arabic: "768451a155d86b8d482037ee7a3b89b5c6b2a3da04853a7f566e3207a5a11d46",
     ]
 
     static var modelApproxSizeBytes: [WhisperModelType: Int64] = [
-        .singlish: 487_601_984,
-        .arabic: 487_622_122,
+        .singlish: 190_085_504,
+        .malay: 190_085_504,
+        .arabic: 190_105_642,
         .english: 487_614_201,
         .multilingual: 487_601_967,
     ]

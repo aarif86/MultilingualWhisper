@@ -37,6 +37,11 @@ final class SettingsViewModel {
         set { settings.maxRecordDurationSeconds = newValue }
     }
 
+    var saveDebugAudio: Bool {
+        get { settings.saveDebugAudio }
+        set { settings.saveDebugAudio = newValue }
+    }
+
     var storageUsedDescription: String {
         ByteCountFormatter.string(fromByteCount: modelDownloadService.totalStorageUsedBytes, countStyle: .file)
     }

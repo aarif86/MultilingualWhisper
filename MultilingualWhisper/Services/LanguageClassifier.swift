@@ -97,9 +97,15 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
             )
         }
 
+        // Malay markers with no Singlish particles alongside them: dominant/pure
+        // Malay, not code-switching - route to the dedicated Malay model instead
+        // of leaving it on Singlish (which only needs to handle *embedded* Malay
+        // loanwords, the case above where singlishHits > 0 too). Same
+        // conservative confidence formula as the Arabic-dominant branch above -
+        // a single loanword-level hit won't trigger a full re-decode on its own.
         if malayHits > 0 {
             return LanguageClassification(
-                recommendedModel: .singlish,
+                recommendedModel: .malay,
                 languageTag: .malay,
                 confidence: min(1, 0.4 + Float(malayHits) * 0.15),
                 components: components

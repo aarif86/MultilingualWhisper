@@ -2,21 +2,34 @@ import XCTest
 @testable import MultilingualWhisper
 
 /// Records the options each `transcribe` call was made with and always answers
-/// with the same canned text - lets these tests pin down which language hint
-/// `WhisperService` sends to the decoder for each pass, with no model file, no
+/// with the same canned segment(s) plus a fixed "detected language" - lets
+/// these tests pin down which language hint `WhisperService` sends to the
+/// decoder for each pass (and, for the per-segment reprocessing tests, which
+/// language it's told an audio slice detects as), with no model file, no
 /// audio hardware, and no physical device involved.
 private actor MockWhisperEngine: WhisperTranscribing {
-    private let text: String
+    private let segments: [WhisperEngine.Segment]
+    private let detectedLanguage: String?
     private(set) var receivedOptions: [WhisperEngine.TranscriptionOptions] = []
+    private(set) var callCount = 0
 
-    init(text: String) {
-        self.text = text
+    init(text: String, detectedLanguage: String? = nil) {
+        self.segments = [WhisperEngine.Segment(text: text, startTime: 0, endTime: 1)]
+        self.detectedLanguage = detectedLanguage
+    }
+
+    init(segments: [WhisperEngine.Segment], detectedLanguage: String? = nil) {
+        self.segments = segments
+        self.detectedLanguage = detectedLanguage
     }
 
     func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment] {
+        callCount += 1
         receivedOptions.append(options)
-        return [WhisperEngine.Segment(text: text, startTime: 0, endTime: 1)]
+        return segments
     }
+
+    func detectedLanguageCode() async -> String? { detectedLanguage }
 }
 
 private struct StubModelStore: ModelStoring {
@@ -28,6 +41,22 @@ private struct StubModelStore: ModelStoring {
 final class WhisperServiceRoutingTests: XCTestCase {
     private func makeService(returning mock: MockWhisperEngine) -> WhisperService {
         WhisperService(modelStore: StubModelStore(), makeEngine: { _ in mock })
+    }
+
+    /// For tests that need DIFFERENT engines per model (e.g. the default
+    /// model's probe detects Malay, so a separate Malay mock should be the
+    /// one that actually re-decodes) - `StubModelStore.localURL` bakes the
+    /// model's own `rawValue` into the fake path, which is what lets this
+    /// pick the right mock without `WhisperService` needing to expose model
+    /// identity to its `makeEngine` factory at all.
+    private func makeService(engines: [WhisperModelType: MockWhisperEngine]) -> WhisperService {
+        WhisperService(modelStore: StubModelStore(), makeEngine: { path in
+            guard let match = engines.first(where: { path.contains($0.key.rawValue) })?.value else {
+                XCTFail("no mock engine registered for path \(path)")
+                return MockWhisperEngine(text: "")
+            }
+            return match
+        })
     }
 
     func testForcedTranscribeUsesTheModelsOwnLanguageHint() async throws {
@@ -96,5 +125,57 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
 
         XCTAssertEqual(result.text, "hello")
+    }
+
+    // MARK: - Per-segment code-switching reprocessing
+
+    func testSegmentReprocessingReroutesASegmentWhoseOwnAudioDetectsADifferentLanguage() async throws {
+        // Mirrors a real bug from project history: an isolated Malay word got
+        // hallucinated into unrelated English text by the default model, so
+        // there was no Malay *keyword* left in the final text for a
+        // whole-clip classifier to catch - but the segment's own AUDIO still
+        // confidently detects as Malay, which per-segment reprocessing
+        // checks instead of re-reading the same already-wrong text.
+        let draftSegment = WhisperEngine.Segment(text: "what my", startTime: 0, endTime: 2)
+        let singlishMock = MockWhisperEngine(segments: [draftSegment], detectedLanguage: "ms")
+        let malayMock = MockWhisperEngine(text: "jalan", detectedLanguage: "ms")
+        let service = makeService(engines: [.singlish: singlishMock, .malay: malayMock])
+
+        let result = try await service.transcribeWithAutoRouting(samples: Array(repeating: Float(0.1), count: 32_000))
+
+        XCTAssertEqual(result.text, "jalan")
+        XCTAssertEqual(result.modelUsed, .singlish, "primary model stays the default - only the one segment rerouted, not the whole clip")
+        XCTAssertEqual(result.languageComponents, [.malay])
+        XCTAssertEqual(await singlishMock.callCount, 2, "one draft decode + one language-ID probe on the segment's own audio")
+        XCTAssertEqual(await malayMock.callCount, 1, "should re-decode the segment exactly once with the better-suited model")
+    }
+
+    func testSegmentReprocessingLeavesAgreeingSegmentsUntouched() async throws {
+        let draftSegment = WhisperEngine.Segment(text: "so I have this laptop", startTime: 0, endTime: 2)
+        let singlishMock = MockWhisperEngine(segments: [draftSegment], detectedLanguage: "en")
+        let service = makeService(returning: singlishMock)
+
+        let result = try await service.transcribeWithAutoRouting(samples: Array(repeating: Float(0.1), count: 32_000))
+
+        XCTAssertEqual(result.text, "so I have this laptop", "segment's own audio agrees with the default model - no reroute")
+        XCTAssertEqual(result.modelUsed, .singlish)
+    }
+
+    func testSegmentReprocessingSkipsSegmentsTooShortToTrust() async throws {
+        // Under the ~1s threshold - per the research behind this feature,
+        // whisper.cpp's own language detection gets meaningfully less
+        // reliable below that, so a short segment keeps its draft text
+        // rather than risk a confident-sounding wrong reroute off too
+        // little audio - even though this mock is (deliberately) configured
+        // to "detect" a different language, to prove the length guard is
+        // what's skipping it, not a lack of disagreement.
+        let shortSegment = WhisperEngine.Segment(text: "eh", startTime: 0, endTime: 0.4)
+        let singlishMock = MockWhisperEngine(segments: [shortSegment], detectedLanguage: "ms")
+        let service = makeService(returning: singlishMock)
+
+        let result = try await service.transcribeWithAutoRouting(samples: Array(repeating: Float(0.1), count: 6_400))
+
+        XCTAssertEqual(result.text, "eh")
+        XCTAssertEqual(await singlishMock.callCount, 1, "should be only the draft pass - too short to spend a probe call on")
     }
 }

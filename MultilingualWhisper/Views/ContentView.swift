@@ -6,6 +6,7 @@ struct ContentView: View {
     let modelDownloadService: ModelDownloadService
     let customDictionaryService: CustomDictionaryService
     @Binding var quickDictateActive: Bool
+    let quickDictateSessionID: UUID
 
     var body: some View {
         TabView {
@@ -20,6 +21,7 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $quickDictateActive) {
             QuickDictateView(audioService: audioService, whisperService: whisperService)
+                .id(quickDictateSessionID)
         }
     }
 }

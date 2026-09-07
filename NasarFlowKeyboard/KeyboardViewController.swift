@@ -10,7 +10,9 @@ import UIKit
 final class KeyboardViewController: UIInputViewController {
 
     private var hostingController: UIHostingController<KeyboardView>?
-    private static let preferredHeight: CGFloat = 216
+    // Bumped from 216 to fit the new manual-fallback caption under the Dictate
+    // button without crowding the pending-result row when both show at once.
+    private static let preferredHeight: CGFloat = 240
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -73,52 +75,25 @@ final class KeyboardViewController: UIInputViewController {
         hostingController?.rootView = makeView()
     }
 
+    // Opening the main app is now handled inside KeyboardView itself via
+    // SwiftUI's `\.openURL` environment action - see the comment on
+    // `dictateButton` there for why (two UIKit-level attempts here, confirmed
+    // on-device, both silently did nothing).
     private func makeView() -> KeyboardView {
         KeyboardView(
             hasFullAccess: hasFullAccess,
             pending: DictationHandoff.pending(),
-            onDictate: { [weak self] in self?.openMainAppToDictate() },
             onInsert: { [weak self] text in self?.insert(text) }
         )
-    }
-
-    private func openMainAppToDictate() {
-        guard hasFullAccess else {
-            DebugLogger.shared.log("Dictate tapped without full access - ignoring", category: "keyboard")
-            return
-        }
-        DebugLogger.shared.log("Dictate tapped, opening \(DictationHandoff.launchURL)", category: "keyboard")
-        openURLViaResponderChain(DictationHandoff.launchURL)
-    }
-
-    /// `UIApplication.shared.open` is unavailable to app extension targets at
-    /// compile time, and `extensionContext.open(_:completionHandler:)` -
-    /// despite compiling and running with no error - is documented as being
-    /// for Today widgets specifically. Using it from a keyboard extension is
-    /// unsupported and, confirmed on a real device, does not actually launch
-    /// the containing app. The long-standing technique that actually works
-    /// (used by essentially every shipping third-party keyboard that needs
-    /// this) is to walk the responder chain until something in it responds to
-    /// `openURL:`, then invoke it dynamically via `perform(_:with:)` - a
-    /// runtime call the compiler can't flag as extension-unavailable, unlike
-    /// a direct `UIApplication.shared.open` call or even `#selector(...)`.
-    private func openURLViaResponderChain(_ url: URL) {
-        let openURLSelector = NSSelectorFromString("openURL:")
-        var responder: UIResponder? = self
-        while let current = responder {
-            if current.responds(to: openURLSelector) {
-                DebugLogger.shared.log("found responder \(type(of: current)) for openURL:", category: "keyboard")
-                current.perform(openURLSelector, with: url)
-                return
-            }
-            responder = current.next
-        }
-        DebugLogger.shared.log("no responder in the chain responds to openURL: - hand-off failed", category: "keyboard")
     }
 
     private func insert(_ text: String) {
         textDocumentProxy.insertText(text)
         DictationHandoff.clearPending()
-        refresh()
+        // This keyboard has no letter keys of its own - once its one job
+        // (inserting the dictated text) is done, hand off to the user's
+        // regular keyboard immediately so they can edit/correct without
+        // hunting for the globe key. Same public API the globe key calls.
+        advanceToNextInputMode()
     }
 }

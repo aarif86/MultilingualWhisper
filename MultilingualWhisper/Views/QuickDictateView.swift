@@ -82,10 +82,14 @@ struct QuickDictateView: View {
                 .padding()
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
 
-            Text("Copied to your clipboard. Switch back to where you were typing and paste, or use Insert in the Nasar Flow keyboard.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 4) {
+                Text("Saved and ready to insert")
+                    .font(.subheadline.weight(.medium))
+                Text("Swipe right along the bottom edge (or tap \u{2039} Back at the top) to jump straight back to what you were typing - no need to tap Done first. Then tap the ready text on your Nasar Flow keyboard to insert it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
 
             Button("Done") { dismiss() }
                 .buttonStyle(.borderedProminent)

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
     @State private var showClearAllConfirmation = false
+    @State private var showKeyboardSetup = false
     // Toggled after clearing the debug log to force `hasDebugLog` to
     // re-evaluate - SwiftUI has no other reason to know the file on disk changed.
     @State private var debugLogRefreshTrigger = false
@@ -28,6 +29,16 @@ struct SettingsView: View {
                             Text(mode.rawValue).tag(mode)
                         }
                     }
+                }
+
+                Section {
+                    Button {
+                        showKeyboardSetup = true
+                    } label: {
+                        Label("Set Up Keyboard", systemImage: "keyboard")
+                    }
+                } footer: {
+                    Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
                 }
 
                 Section {
@@ -100,7 +111,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug Log")
                 } footer: {
-                    Text("A local, on-device log of recording/transcription activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                    Text("A local, on-device log of recording/transcription/keyboard activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
                 }
 
                 Section("About") {
@@ -111,6 +122,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showKeyboardSetup) {
+                KeyboardSetupView()
+            }
             .confirmationDialog(
                 "Delete all transcriptions? This can't be undone.",
                 isPresented: $showClearAllConfirmation,

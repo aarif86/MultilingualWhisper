@@ -31,6 +31,7 @@ struct MultilingualWhisperApp: App {
             // required for a keyboard to open a URL at all) when its Dictate
             // button is tapped - see DictationHandoff.swift and NasarFlowKeyboard/.
             .onOpenURL { url in
+                DebugLogger.shared.log("onOpenURL received: \(url)", category: "app")
                 guard url.scheme == DictationHandoff.urlScheme,
                       url.host == DictationHandoff.dictateHost else { return }
                 quickDictateActive = true

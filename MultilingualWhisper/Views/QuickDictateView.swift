@@ -82,10 +82,14 @@ struct QuickDictateView: View {
                 .padding()
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
 
+            // Was more specific here about a swipe gesture to jump straight
+            // back - pulled that claim after a real device test showed no
+            // such affordance actually appears for this app-extension-
+            // triggered flow, so don't reintroduce it without new evidence.
             VStack(spacing: 4) {
                 Text("Saved and ready to insert")
                     .font(.subheadline.weight(.medium))
-                Text("Swipe right along the bottom edge (or tap \u{2039} Back at the top) to jump straight back to what you were typing - no need to tap Done first. Then tap the ready text on your Nasar Flow keyboard to insert it.")
+                Text("No need to tap Done first - switch back to where you were typing (app switcher works fine), then tap the ready text on your Nasar Flow keyboard to insert it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

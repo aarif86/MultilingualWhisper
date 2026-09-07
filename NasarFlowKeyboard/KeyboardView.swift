@@ -7,7 +7,9 @@ struct KeyboardView: View {
 
     let hasFullAccess: Bool
     let pending: (text: String, date: Date)?
+    let lastInsertedText: String?
     let onInsert: (String) -> Void
+    let onUndoInsert: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
@@ -16,6 +18,11 @@ struct KeyboardView: View {
             } else {
                 if let pending {
                     pendingResultRow(pending.text)
+                } else if let lastInsertedText {
+                    // Only shown once there's no new pending result waiting -
+                    // a fresh dictation always takes priority over undoing
+                    // the previous one.
+                    undoInsertRow(lastInsertedText)
                 }
                 dictateButton
             }
@@ -77,6 +84,29 @@ struct KeyboardView: View {
         .buttonStyle(.plain)
     }
 
+    private func undoInsertRow(_ text: String) -> some View {
+        Button(role: .destructive) {
+            onUndoInsert()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.uturn.backward")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Not what you said? Tap to remove")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(text)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(8)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var fullAccessNeeded: some View {
         VStack(spacing: 6) {
             Text("Enable Full Access")
@@ -94,7 +124,20 @@ struct KeyboardView: View {
     KeyboardView(
         hasFullAccess: true,
         pending: (text: "Bismillah, let's go makan lah", date: Date()),
-        onInsert: { _ in }
+        lastInsertedText: nil,
+        onInsert: { _ in },
+        onUndoInsert: {}
+    )
+    .frame(height: 216)
+}
+
+#Preview("After insert") {
+    KeyboardView(
+        hasFullAccess: true,
+        pending: nil,
+        lastInsertedText: "Bismillah, let's go makan lah",
+        onInsert: { _ in },
+        onUndoInsert: {}
     )
     .frame(height: 216)
 }

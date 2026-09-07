@@ -10,6 +10,12 @@ import UIKit
 final class KeyboardViewController: UIInputViewController {
 
     private var hostingController: UIHostingController<KeyboardView>?
+    // What insert() last typed, so a bad dictation ("that's not what I said")
+    // can be removed with one tap without ever leaving this keyboard. Cleared
+    // once used; a stale value just means the undo row shows one insert too
+    // long, never a wrong deletion, since undo always deletes exactly this
+    // many characters regardless of what's shown.
+    private var lastInsertedText: String?
     // Bumped from 216 to fit the new manual-fallback caption under the Dictate
     // button without crowding the pending-result row when both show at once.
     private static let preferredHeight: CGFloat = 240
@@ -83,17 +89,32 @@ final class KeyboardViewController: UIInputViewController {
         KeyboardView(
             hasFullAccess: hasFullAccess,
             pending: DictationHandoff.pending(),
-            onInsert: { [weak self] text in self?.insert(text) }
+            lastInsertedText: lastInsertedText,
+            onInsert: { [weak self] text in self?.insert(text) },
+            onUndoInsert: { [weak self] in self?.undoLastInsert() }
         )
     }
 
+    // Deliberately does NOT call advanceToNextInputMode() here - an earlier
+    // version did, on the theory that it'd help editing, but on-device that
+    // just meant switching back to Nasar Flow again before every next
+    // dictation. Staying put plus a one-tap undo (below) covers "that's not
+    // what I said" without penalizing dictating several messages in a row.
     private func insert(_ text: String) {
         textDocumentProxy.insertText(text)
+        lastInsertedText = text
         DictationHandoff.clearPending()
-        // This keyboard has no letter keys of its own - once its one job
-        // (inserting the dictated text) is done, hand off to the user's
-        // regular keyboard immediately so they can edit/correct without
-        // hunting for the globe key. Same public API the globe key calls.
-        advanceToNextInputMode()
+        refresh()
+    }
+
+    // textDocumentProxy has no "undo" of its own - deleteBackward() one
+    // character at a time, exactly as this keyboard's own backspace key
+    // would, is the standard way any keyboard extension removes text it
+    // just inserted.
+    private func undoLastInsert() {
+        guard let text = lastInsertedText else { return }
+        text.forEach { _ in textDocumentProxy.deleteBackward() }
+        lastInsertedText = nil
+        refresh()
     }
 }

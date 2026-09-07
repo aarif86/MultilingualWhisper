@@ -75,60 +75,16 @@ final class KeyboardViewController: UIInputViewController {
         hostingController?.rootView = makeView()
     }
 
+    // Opening the main app is now handled inside KeyboardView itself via
+    // SwiftUI's `\.openURL` environment action - see the comment on
+    // `dictateButton` there for why (two UIKit-level attempts here, confirmed
+    // on-device, both silently did nothing).
     private func makeView() -> KeyboardView {
         KeyboardView(
             hasFullAccess: hasFullAccess,
             pending: DictationHandoff.pending(),
-            onDictate: { [weak self] in self?.openMainAppToDictate() },
             onInsert: { [weak self] text in self?.insert(text) }
         )
-    }
-
-    private func openMainAppToDictate() {
-        guard hasFullAccess else {
-            DebugLogger.shared.log("Dictate tapped without full access - ignoring", category: "keyboard")
-            return
-        }
-        DebugLogger.shared.log("Dictate tapped, opening \(DictationHandoff.launchURL)", category: "keyboard")
-        openURLViaResponderChain(DictationHandoff.launchURL)
-    }
-
-    /// `UIApplication.shared.open` is unavailable to app extension targets at
-    /// compile time. `extensionContext.open(_:completionHandler:)` - confirmed
-    /// against Apple's own current documentation, not just old forum threads -
-    /// explicitly lists only the Today widget and iMessage extension points as
-    /// supporting it; keyboard extensions aren't on that list, and indeed it
-    /// compiles, runs, and does nothing when tried from one.
-    ///
-    /// The long-documented community workaround is walking the responder chain
-    /// for something that responds to `openURL:` and invoking it dynamically -
-    /// a first attempt at that (plain `perform(_:with:)`, passing the Swift
-    /// `URL` as-is) *also* did nothing on a real device, with no crash and no
-    /// error. Two changes here versus that attempt: explicitly bridging to
-    /// `NSURL` before crossing into a fully-dynamic Objective-C call (Swift's
-    /// automatic NSURL bridging is reliable for statically-typed calls, less
-    /// certain through a boxed `Any` parameter), and deferring the call by one
-    /// run loop tick via `perform(_:with:afterDelay:)` instead of calling
-    /// synchronously from inside the SwiftUI button action, since a few
-    /// real-world reports of this exact technique note the synchronous form
-    /// can be silently dropped mid-gesture-handling. If this *still* doesn't
-    /// launch the app, check the debug log for whether "found responder" even
-    /// appears - that tells us whether the chain-walk itself is the dead end,
-    /// or whether openURL: is being reached but is a no-op for this extension
-    /// point specifically (which would mean this whole approach is a dead end
-    /// on current iOS, not just this specific call).
-    private func openURLViaResponderChain(_ url: URL) {
-        let openURLSelector = NSSelectorFromString("openURL:")
-        var responder: UIResponder? = self
-        while let current = responder {
-            if current.responds(to: openURLSelector) {
-                DebugLogger.shared.log("found responder \(type(of: current)) for openURL:, invoking", category: "keyboard")
-                current.perform(openURLSelector, with: url as NSURL, afterDelay: 0)
-                return
-            }
-            responder = current.next
-        }
-        DebugLogger.shared.log("no responder in the chain responds to openURL: - hand-off failed", category: "keyboard")
     }
 
     private func insert(_ text: String) {

@@ -158,8 +158,22 @@ final class FlowSessionEngine {
         FlowSessionState.isRecording = false
         FlowSessionState.utteranceStartedAt = nil
         DarwinNotification.post(FlowSessionState.stateChanged)
-        guard publish, !captured.isEmpty else { return }
+        guard publish else { return }
+        guard !captured.isEmpty else {
+            // Was silently doing nothing here - the keyboard would sit on
+            // "Transcribing..." for its full timeout with no way to tell this
+            // apart from a slow-but-working transcription. Now it finds out
+            // immediately via lastFailureAt instead.
+            DebugLogger.shared.log("FlowSession stopUtterance with zero samples captured", category: "flow")
+            signalFailure()
+            return
+        }
         transcribeAndPublish(captured, duration: duration)
+    }
+
+    private func signalFailure() {
+        FlowSessionState.lastFailureAt = Date()
+        DarwinNotification.post(FlowSessionState.stateChanged)
     }
 
     private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) {
@@ -173,6 +187,7 @@ final class FlowSessionEngine {
                 }
                 guard !result.text.isEmpty else {
                     DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")
+                    signalFailure()
                     return
                 }
                 DictationHandoff.publish(result.text)
@@ -182,6 +197,7 @@ final class FlowSessionEngine {
                 DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
             } catch {
                 DebugLogger.shared.log("FlowSession transcription failed: \(error)", category: "flow")
+                signalFailure()
             }
         }
     }

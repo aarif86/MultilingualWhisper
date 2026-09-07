@@ -16,6 +16,7 @@ struct KeyboardView: View {
         case readyToListen
         case listening(elapsed: TimeInterval)
         case transcribing
+        case failed
     }
 
     let hasFullAccess: Bool
@@ -59,6 +60,8 @@ struct KeyboardView: View {
             listeningButton(elapsed: elapsed)
         case .transcribing:
             transcribingView
+        case .failed:
+            failedButton
         }
     }
 
@@ -122,6 +125,19 @@ struct KeyboardView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
+    }
+
+    private var failedButton: some View {
+        Button {
+            onStartListening()
+        } label: {
+            Label("Couldn't transcribe that - tap to try again", systemImage: "exclamationmark.triangle")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.bordered)
+        .tint(.orange)
     }
 
     private func pendingResultRow(_ text: String) -> some View {

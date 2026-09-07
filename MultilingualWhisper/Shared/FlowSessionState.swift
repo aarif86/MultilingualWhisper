@@ -31,6 +31,7 @@ enum FlowSessionState {
     private static let isActiveKey = "flow.isActive"
     private static let isRecordingKey = "flow.isRecording"
     private static let startedAtKey = "flow.utteranceStartedAt"
+    private static let lastFailureKey = "flow.lastFailureAt"
 
     private static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: DictationHandoff.appGroupID)
@@ -59,6 +60,15 @@ enum FlowSessionState {
         set { sharedDefaults?.set(newValue, forKey: startedAtKey) }
     }
 
+    /// Set by the app the instant a transcription attempt fails or comes back
+    /// empty - lets the keyboard notice and give up immediately instead of
+    /// only ever finding out via its own 20-second last-resort timeout, which
+    /// otherwise looks indistinguishable from "still working" the whole time.
+    static var lastFailureAt: Date? {
+        get { sharedDefaults?.object(forKey: lastFailureKey) as? Date }
+        set { sharedDefaults?.set(newValue, forKey: lastFailureKey) }
+    }
+
     /// Called when a session ends (explicitly, or the app decides to time it
     /// out) so the keyboard falls back to "Start" instead of a stale
     /// listening-capable state that no longer actually works.
@@ -66,5 +76,6 @@ enum FlowSessionState {
         isActive = false
         isRecording = false
         utteranceStartedAt = nil
+        lastFailureAt = nil
     }
 }

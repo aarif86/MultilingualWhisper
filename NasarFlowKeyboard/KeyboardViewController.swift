@@ -24,6 +24,7 @@ final class KeyboardViewController: UIInputViewController {
         case idle
         case awaitingStart
         case awaitingResult
+        case failed
     }
 
     private var hostingController: UIHostingController<KeyboardView>?
@@ -137,26 +138,46 @@ final class KeyboardViewController: UIInputViewController {
         switch flowPhase {
         case .awaitingStart: return .listening(elapsed: 0)
         case .awaitingResult: return .transcribing
+        case .failed: return .failed
         case .idle: return .readyToListen
         }
     }
 
-    private func handleStateChanged() {
+    /// Checks whether shared state has moved on without us hearing about it
+    /// via a pushed stateChanged notification, and self-corrects if so. Called
+    /// both from that push AND from the tick timer - the tick is what makes
+    /// this robust even if a particular notification never actually arrives
+    /// at this process (unconfirmed either way for the app-to-keyboard
+    /// direction specifically, as opposed to keyboard-to-app, which is
+    /// confirmed working).
+    private func reconcilePhase() {
         if FlowSessionState.isRecording {
             // Confirmed - stop locally overriding, currentFlowUIState() now
             // reads the real elapsed time straight from shared state.
             flowPhase = .idle
             phaseTimeoutTimer?.invalidate()
-        } else if flowPhase == .awaitingResult, DictationHandoff.pending() != nil {
-            flowPhase = .idle
-            stopTicking()
-            phaseTimeoutTimer?.invalidate()
+        } else if flowPhase == .awaitingResult {
+            if DictationHandoff.pending() != nil {
+                flowPhase = .idle
+                stopTicking()
+                phaseTimeoutTimer?.invalidate()
+            } else if FlowSessionState.lastFailureAt != nil {
+                DebugLogger.shared.log("Flow: transcription failure signaled by app", category: "keyboard")
+                flowPhase = .failed
+                stopTicking()
+                phaseTimeoutTimer?.invalidate()
+            }
         }
+    }
+
+    private func handleStateChanged() {
+        reconcilePhase()
         refresh()
     }
 
     private func startListening() {
         DebugLogger.shared.log("Flow: startListening tapped", category: "keyboard")
+        FlowSessionState.lastFailureAt = nil
         flowPhase = .awaitingStart
         startTicking()
         DarwinNotification.post(FlowSessionState.startUtterance)
@@ -178,12 +199,17 @@ final class KeyboardViewController: UIInputViewController {
     private func stopListening() {
         DebugLogger.shared.log("Flow: stopListening tapped", category: "keyboard")
         flowPhase = .awaitingResult
-        stopTicking()
+        // Kept running (not stopped) through the wait for a result - this is
+        // what lets reconcilePhase() self-heal via polling even if the app's
+        // stateChanged push never reaches this process, rather than betting
+        // everything on that one notification arriving.
+        startTicking()
         DarwinNotification.post(FlowSessionState.stopUtterance)
-        schedulePhaseTimeout(seconds: 15) { [weak self] in
+        schedulePhaseTimeout(seconds: 20) { [weak self] in
             guard let self, self.flowPhase == .awaitingResult else { return }
             DebugLogger.shared.log("Flow: no transcription result within timeout after stop", category: "keyboard")
-            self.flowPhase = .idle
+            self.flowPhase = .failed
+            self.stopTicking()
             self.refresh()
         }
         refresh()
@@ -192,6 +218,7 @@ final class KeyboardViewController: UIInputViewController {
     private func startTicking() {
         tickTimer?.invalidate()
         tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.reconcilePhase()
             self?.refresh()
         }
     }

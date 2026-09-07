@@ -41,9 +41,19 @@ actor WhisperEngine {
 
     private let context: OpaquePointer
 
-    init(modelPath: String, useGPU: Bool = true) throws {
+    init(modelPath: String) throws {
         var contextParams = whisper_context_default_params()
-        contextParams.use_gpu = useGPU
+        // CPU only, not a performance default - confirmed via a real device
+        // log that GPU decode fails instantly (whisper_full returns nonzero,
+        // no crash) whenever it runs while the app is backgrounded, which
+        // FlowSessionEngine's whole design requires. iOS enforces this at the
+        // OS level (kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted -
+        // "insufficient permission to submit GPU work from background"), not
+        // something whisper.cpp or this app can opt out of. CPU compute has
+        // no such restriction. These are all "small" GGML models already
+        // fast enough on CPU alone (see decode timings in any debug log) -
+        // not a meaningful speed trade-off for the reliability this buys.
+        contextParams.use_gpu = false
 
         guard let ctx = modelPath.withCString({ whisper_init_from_file_with_params($0, contextParams) }) else {
             throw EngineError.failedToLoadModel(path: modelPath)

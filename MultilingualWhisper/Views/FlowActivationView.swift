@@ -4,10 +4,14 @@ import SwiftUI
 /// "Start" button (or the in-app toggle in Settings) - mirrors Wispr Flow's
 /// own "Flow is on" screen. Unlike QuickDictateView, this does NOT record
 /// anything itself - its only job is confirming the session is live and
-/// telling the user how to get back to what they were doing, since there's
-/// still no supported way for the app to do that automatically (see project
-/// memory on the swipe-gesture claim that didn't hold up on a real device -
-/// deliberately not repeating that specific claim here).
+/// showing how to get back to what they were doing, since there's still no
+/// supported way for the app to do that automatically. Deliberately teaches
+/// the general "swipe along the bottom edge to cycle to the most recently
+/// used app" system gesture here (see SwipeGestureIllustration) rather than
+/// the app-specific "\u{2039} Back to App" pill claimed earlier in
+/// QuickDictateView's history, which didn't hold up on a real device for
+/// that extension-triggered flow - the general gesture doesn't depend on how
+/// Nasar Flow was opened, so it isn't resting on the same unverified ground.
 struct FlowActivationView: View {
     @Environment(\.dismiss) private var dismiss
     let flowSession: FlowSessionEngine
@@ -40,11 +44,14 @@ struct FlowActivationView: View {
             Spacer()
 
             if flowSession.isActive {
-                Text("Switch back to where you were (app switcher or Home) - the keyboard will be listening for you there.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                VStack(spacing: 10) {
+                    SwipeGestureIllustration()
+                    Text("Swipe right along the very bottom edge to jump back - faster than the app switcher.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
             }
 
             Button("Done") { dismiss() }
@@ -54,6 +61,45 @@ struct FlowActivationView: View {
         .task {
             if !flowSession.isActive {
                 await flowSession.activate()
+            }
+        }
+    }
+}
+
+/// A general iOS system gesture (cycle to the most-recently-used app), not
+/// tied to how Nasar Flow itself was opened - unlike the "\u{2039} Back to App"
+/// pill this app can't reliably promise (see the earlier, retracted claim
+/// about that in QuickDictateView's history), this one works regardless.
+/// Modeled on Wispr Flow's own onboarding illustration for the same gesture.
+private struct SwipeGestureIllustration: View {
+    @State private var slid = false
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 30)
+                .strokeBorder(.secondary, lineWidth: 3)
+
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.15))
+                .padding(.horizontal, 14)
+                .padding(.bottom, 28)
+                .frame(height: 80)
+
+            Capsule()
+                .fill(.secondary)
+                .frame(width: 46, height: 5)
+                .padding(.bottom, 10)
+
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .shadow(radius: 2)
+                .offset(x: slid ? 32 : -32, y: -8)
+        }
+        .frame(width: 110, height: 190)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                slid = true
             }
         }
     }

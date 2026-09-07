@@ -177,6 +177,9 @@ final class TranscriptionViewModel {
         // Distinguishes "audio capture produced nothing" from "whisper decoded
         // the captured audio to nothing" - otherwise identical from the outside.
         DebugLogger.shared.log("stopAndTranscribe: samples=\(samples.count) duration=\(duration)", category: "viewmodel")
+        if settings.saveDebugAudio {
+            DebugAudioStore.save(samples: samples)
+        }
         phase = .transcribing
 
         Task {

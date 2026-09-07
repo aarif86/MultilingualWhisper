@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
+    let flowSession: FlowSessionEngine
     @State private var showClearAllConfirmation = false
     @State private var showKeyboardSetup = false
     // Toggled after clearing the debug log/audio, and on every appearance of
@@ -23,8 +24,27 @@ struct SettingsView: View {
         return DebugAudioStore.latestFile()
     }
 
-    init(modelDownloadService: ModelDownloadService) {
+    init(modelDownloadService: ModelDownloadService, flowSession: FlowSessionEngine) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
+        self.flowSession = flowSession
+    }
+
+    /// Turning it on is async (mic permission + starting the continuous
+    /// engine - see FlowSessionEngine.activate()), but Toggle needs a plain
+    /// Binding<Bool> - fire the async work and let flowSession.isActive
+    /// (an @Observable property) drive the toggle's actual displayed state
+    /// once it resolves, rather than assuming success immediately.
+    private var flowToggleBinding: Binding<Bool> {
+        Binding(
+            get: { flowSession.isActive },
+            set: { newValue in
+                if newValue {
+                    Task { await flowSession.activate() }
+                } else {
+                    flowSession.end()
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -46,6 +66,25 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
+                }
+
+                Section {
+                    Toggle("Flow", isOn: flowToggleBinding)
+
+                    if flowSession.isRecording {
+                        Label("Listening\u{2026}", systemImage: "waveform")
+                            .foregroundStyle(.green)
+                    }
+
+                    if let error = flowSession.lastError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Flow")
+                } footer: {
+                    Text("When on, dictate straight from the Nasar Flow keyboard in any app - no need to open Nasar Flow for each dictation. This keeps the microphone engine running in the background while it's on, so turn it off when you're done to save battery.")
                 }
 
                 Section {

@@ -9,6 +9,7 @@ struct MultilingualWhisperApp: App {
     @State private var modelDownloadService: ModelDownloadService
     @State private var whisperService: WhisperService
     @State private var quickDictateActive = false
+    @State private var quickDictateSessionID = UUID()
 
     init() {
         // whisperService depends on modelDownloadService (it asks it "is X downloaded,
@@ -25,7 +26,8 @@ struct MultilingualWhisperApp: App {
                 audioService: audioService,
                 whisperService: whisperService,
                 modelDownloadService: modelDownloadService,
-                quickDictateActive: $quickDictateActive
+                quickDictateActive: $quickDictateActive,
+                quickDictateSessionID: quickDictateSessionID
             )
             // The keyboard extension launches nasarflow://dictate (Full Access
             // required for a keyboard to open a URL at all) when its Dictate
@@ -34,6 +36,11 @@ struct MultilingualWhisperApp: App {
                 DebugLogger.shared.log("onOpenURL received: \(url)", category: "app")
                 guard url.scheme == DictationHandoff.urlScheme,
                       url.host == DictationHandoff.dictateHost else { return }
+                // A fresh UUID forces SwiftUI to recreate QuickDictateView even
+                // if the cover is already showing - e.g. the user dictated
+                // again without dismissing the previous result, easy to do now
+                // that leaving via the system back gesture skips "Done".
+                quickDictateSessionID = UUID()
                 quickDictateActive = true
             }
         }

@@ -90,6 +90,10 @@ final class KeyboardViewController: UIInputViewController {
     private func insert(_ text: String) {
         textDocumentProxy.insertText(text)
         DictationHandoff.clearPending()
-        refresh()
+        // This keyboard has no letter keys of its own - once its one job
+        // (inserting the dictated text) is done, hand off to the user's
+        // regular keyboard immediately so they can edit/correct without
+        // hunting for the globe key. Same public API the globe key calls.
+        advanceToNextInputMode()
     }
 }

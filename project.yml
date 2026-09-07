@@ -27,6 +27,16 @@ targets:
       properties:
         CFBundleDisplayName: "Nasar Flow"
         NSMicrophoneUsageDescription: "Nasar Flow needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
+        # Lets FlowSessionEngine's audio engine keep running while the app is
+        # backgrounded - required for the keyboard's "Flow" session (activate
+        # once, dictate repeatedly from the keyboard afterwards) to work at
+        # all. A legitimate, Apple-documented background-mode use ("the app
+        # records audio content while in the background"), not a workaround -
+        # see FlowSessionEngine's doc comment for the part of this that's
+        # still genuinely unverified (whether the engine has to be actively
+        # running, vs merely "active", to actually keep the app alive).
+        UIBackgroundModes:
+          - audio
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
         # Both reference build settings rather than hardcoding values, so

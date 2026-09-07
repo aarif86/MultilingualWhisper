@@ -21,7 +21,7 @@ struct KeyboardSetupView: View {
         Step(title: "Open Settings", detail: "Tap \u{201C}Open Settings\u{201D} below, or go there yourself: Settings app \u{2192} General \u{2192} Keyboard \u{2192} Keyboards."),
         Step(title: "Add New Keyboard", detail: "Tap \u{201C}Add New Keyboard\u{2026}\u{201D} and select \u{201C}Nasar Flow\u{201D} from the list."),
         Step(title: "Allow Full Access", detail: "Tap \u{201C}Nasar Flow\u{201D} in that same Keyboards list again, then turn on \u{201C}Allow Full Access.\u{201D} This is required - the keyboard can't even open this app to dictate without it."),
-        Step(title: "Switch keyboards to use it", detail: "In any app with a text field, tap and hold (or tap) the globe icon on the keyboard to switch to Nasar Flow, then tap Dictate."),
+        Step(title: "Switch keyboards to use it", detail: "In any app with a text field, tap and hold (or tap) the globe icon on the keyboard to switch to Nasar Flow, then tap \u{201C}Start Flow.\u{201D} That's a one-time activation (also toggleable in Settings) - after it, the keyboard's own mic button dictates directly without opening Nasar Flow again."),
     ]
 
     var body: some View {

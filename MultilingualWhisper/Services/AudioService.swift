@@ -13,12 +13,14 @@ final class AudioService {
         case permissionDenied
         case alreadyRecording
         case engineSetupFailed
+        case flowSessionActive
 
         var errorDescription: String? {
             switch self {
             case .permissionDenied: return "Microphone access was denied. Enable it in Settings to record."
             case .alreadyRecording: return "Already recording."
             case .engineSetupFailed: return "Couldn't set up the audio engine."
+            case .flowSessionActive: return "Turn off Flow in Settings first - it's already using the microphone in the background."
             }
         }
     }
@@ -80,6 +82,12 @@ final class AudioService {
 
     func startRecording(onAutoStop: (() -> Void)? = nil) throws {
         guard !isRecording else { throw AudioServiceError.alreadyRecording }
+        // FlowSessionEngine (Flow session) owns its own separate AVAudioEngine
+        // instance that's already holding the one shared AVAudioSession when
+        // active - starting a second engine on top of it would fight over
+        // that singleton rather than cleanly coexisting. Block with a clear
+        // message instead of silently corrupting either recording.
+        guard !FlowSessionState.isActive else { throw AudioServiceError.flowSessionActive }
         guard AVAudioApplication.shared.recordPermission == .granted else {
             throw AudioServiceError.permissionDenied
         }

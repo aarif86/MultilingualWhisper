@@ -115,6 +115,7 @@ targets:
     scheme:
       testTargets:
         - MultilingualWhisperTests
+        - MultilingualWhisperUITests
       gatherCoverageData: true
 
   NasarFlowKeyboard:
@@ -157,6 +158,29 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: MultilingualWhisperTests
+    dependencies:
+      - target: MultilingualWhisper
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+
+  # Simulator-driven UI tests (XCUITest) - launches the real built app in a
+  # booted iOS Simulator and drives it via the accessibility tree, unlike
+  # MultilingualWhisperTests above which never touches UI at all. Scoped
+  # deliberately to launch/crash/navigation checks only - things like tapping
+  # Record need mic-permission handling that's a real source of CI flakiness,
+  # and every actual bug this app has shipped so far (GPU blocked in the
+  # background, keyboard hand-off, backgrounding/suspension timing) needs real
+  # hardware to reproduce anyway, which the Simulator doesn't enforce the same
+  # way. This layer's job is narrower: catch "the app doesn't even launch"
+  # (see the whisper.xcframework embed:true history above - that exact class
+  # of bug) before a build ever reaches TestFlight.
+  MultilingualWhisperUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: MultilingualWhisperUITests
     dependencies:
       - target: MultilingualWhisper
     settings:

@@ -25,7 +25,14 @@ private actor MockWhisperEngine: WhisperTranscribing {
     func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment] {
         callCount += 1
         if let errorToThrow { throw errorToThrow }
-        return [WhisperEngine.Segment(text: text, startTime: 0, endTime: 1)]
+        // endTime 0.5, not 1.0: WhisperService.minSegmentDurationToProbe is 1.0 (>=), and this
+        // file's callCount assertions are about FlowSessionEngine's OWN signal-handling (did it
+        // transcribe once per accumulated utterance, not zero, not twice for a stray duplicate
+        // signal) - not about WhisperService's separate per-segment reprocessing feature. A
+        // 1.0s-or-longer segment here would make transcribeWithAutoRouting probe it a second
+        // time, inflating callCount to 2 for reasons unrelated to what these tests actually
+        // check, exactly as happened when this was first merged alongside that feature.
+        return [WhisperEngine.Segment(text: text, startTime: 0, endTime: 0.5)]
     }
 
     func detectedLanguageCode() async -> String? { nil }

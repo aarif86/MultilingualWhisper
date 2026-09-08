@@ -36,6 +36,8 @@ private actor MockWhisperEngine: WhisperTranscribing {
     }
 
     func detectedLanguageCode() async -> String? { nil }
+
+    func arabicLanguageProbability(samples: [Float]) async throws -> Float { 0 }
 }
 
 private struct StubModelStore: ModelStoring {

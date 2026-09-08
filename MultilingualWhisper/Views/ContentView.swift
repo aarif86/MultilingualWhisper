@@ -4,6 +4,7 @@ struct ContentView: View {
     let audioService: AudioService
     let whisperService: WhisperService
     let modelDownloadService: ModelDownloadService
+    let customDictionaryService: CustomDictionaryService
     let flowSession: FlowSessionEngine
     @Binding var quickDictateActive: Bool
     let quickDictateSessionID: UUID
@@ -16,7 +17,7 @@ struct ContentView: View {
             HistoryView()
                 .tabItem { Label("History", systemImage: "clock") }
 
-            SettingsView(modelDownloadService: modelDownloadService, flowSession: flowSession)
+            SettingsView(modelDownloadService: modelDownloadService, flowSession: flowSession, customDictionaryService: customDictionaryService)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .fullScreenCover(isPresented: $quickDictateActive) {

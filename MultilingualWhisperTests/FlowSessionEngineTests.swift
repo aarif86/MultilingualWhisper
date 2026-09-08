@@ -65,7 +65,7 @@ final class FlowSessionEngineTests: XCTestCase {
     }
 
     private func makeEngine(returning mock: MockWhisperEngine) -> FlowSessionEngine {
-        let whisperService = WhisperService(modelStore: StubModelStore(), makeEngine: { _ in mock })
+        let whisperService = WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { _ in mock })
         let schema = Schema([Transcription.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: schema, configurations: [configuration])

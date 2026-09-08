@@ -26,10 +26,11 @@ below for what's still deliberately simplified.
   on-device via its own `whisper.xcframework` (built by whisper.cpp's own
   `build-xcframework.sh`), called directly from Swift through the framework's
   bundled module map - no Objective-C++ bridge needed.
-- **Language routing** - there are up to four GGML models a user can download
-  (Singlish, Arabic, English, general multilingual). "Auto-Detect" mode transcribes
-  once with the Singlish model (it's the broadest net for Singlish/Malay/English
-  code-switching), classifies the resulting text with a rule-based classifier
+- **Language routing** - there are five GGML models a user can download
+  (Singlish, Malay, Arabic, English, general multilingual). "Auto-Detect" mode
+  transcribes once with the Singlish model (it's the broadest net for
+  Singlish/Malay/English code-switching), classifies the resulting text with a
+  rule-based classifier
   (Arabic Unicode-block + keyword matching - see `LanguageClassifier.swift`), and
   only re-transcribes with a different model if the classifier is confident enough
   that it would do meaningfully better. This two-pass design exists because
@@ -41,9 +42,9 @@ below for what's still deliberately simplified.
 ## Keyboard extension
 
 `NasarFlowKeyboard` is a system-wide custom keyboard (a separate Xcode
-extension target, `com.multilingualwhisper.app.keyboard`) with a "Dictate"
-button, so Nasar Flow can be used for input in any app - Messages, Notes,
-anywhere there's a text field - not just its own screens.
+extension target, `com.multilingualwhisper.app.keyboard`), so Nasar Flow can
+be used for input in any app - Messages, Notes, anywhere there's a text field
+- not just its own screens.
 
 **It can't record audio itself.** iOS has blocked microphone access from
 keyboard extensions entirely since iOS 8, and that's true even with "Full
@@ -51,15 +52,27 @@ Access" granted - there's no exception, by design (otherwise any installed
 keyboard could silently record everything said, not just everything typed).
 This isn't a shortcut specific to this app; it's the same wall every
 third-party dictation keyboard hits, including well-known ones like Willow and
-Wispr Flow. So the flow is:
+Wispr Flow. Nasar Flow works around it the same way Wispr Flow's own keyboard
+does - a one-time activation, then dictate directly from the keyboard
+afterward, rather than hopping to the main app for every single utterance:
 
-1. Tap **Dictate** in the keyboard
-2. It switches you to Nasar Flow (`nasarflow://dictate`), which records and
-   transcribes using the exact same pipeline as the main app
-3. The result is copied to your clipboard and dropped into a shared App Group
-   container
-4. Switch back to whatever you were doing - the keyboard shows an **Insert**
-   button with a preview of the text, or just paste normally
+1. Tap **Start Flow** in the keyboard (or flip the **Flow** toggle in
+   Settings from inside the app) - either opens/activates a "Flow session"
+   (`FlowSessionEngine`), which keeps a single audio engine running
+   continuously in the background for as long as the session stays on
+2. Switch back to whatever you were doing - there's still no supported way
+   for an app to do this last step automatically (see the "Flow is on"
+   screen's own swipe-gesture tip); this activation only has to happen once,
+   not per dictation
+3. The keyboard now shows a **mic button** directly - tap to speak, tap
+   again to stop. Each dictation is sent to the already-running background
+   session via Darwin notifications and transcribed through the exact same
+   pipeline as the main app, with the result copied to your clipboard and
+   dropped into a shared App Group container for the keyboard's **Insert**
+   button to pick up
+4. Turn **Flow** off again (Settings, or programmatically) when you're done -
+   the background engine keeps the microphone active the whole time it's on,
+   so this isn't meant to be left on indefinitely
 
 ### Extra setup this needs
 

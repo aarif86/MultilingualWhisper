@@ -8,6 +8,7 @@ struct MultilingualWhisperApp: App {
     @State private var audioService = AudioService()
     @State private var modelDownloadService: ModelDownloadService
     @State private var whisperService: WhisperService
+    @State private var customDictionaryService: CustomDictionaryService
     @State private var flowSession: FlowSessionEngine
     @State private var quickDictateActive = false
     @State private var quickDictateSessionID = UUID()
@@ -17,10 +18,15 @@ struct MultilingualWhisperApp: App {
         // whisperService depends on modelDownloadService (it asks it "is X downloaded,
         // where's the file"), so it can't just be another independently-defaulted
         // @State property - it has to be built after modelDownloadService exists.
-        // Same reasoning for flowSession depending on whisperService.
+        // customDictionaryService is built once here and threaded into both
+        // whisperService and Settings, so edits made in Settings actually affect
+        // live transcription instead of a second, disconnected instance. Same
+        // reasoning for flowSession depending on whisperService.
         let downloadService = ModelDownloadService()
-        let whisper = WhisperService(modelStore: downloadService)
+        let dictionaryService = CustomDictionaryService()
+        let whisper = WhisperService(modelStore: downloadService, customDictionary: dictionaryService)
         _modelDownloadService = State(initialValue: downloadService)
+        _customDictionaryService = State(initialValue: dictionaryService)
         _whisperService = State(initialValue: whisper)
         _flowSession = State(initialValue: FlowSessionEngine(whisperService: whisper, modelContainer: modelContainer))
     }
@@ -31,6 +37,7 @@ struct MultilingualWhisperApp: App {
                 audioService: audioService,
                 whisperService: whisperService,
                 modelDownloadService: modelDownloadService,
+                customDictionaryService: customDictionaryService,
                 flowSession: flowSession,
                 quickDictateActive: $quickDictateActive,
                 quickDictateSessionID: quickDictateSessionID

@@ -51,6 +51,7 @@ final class WhisperService {
 
     private let modelStore: ModelStoring
     private let classifier: LanguageClassifying
+    private let customDictionary: CustomDictionaryService
     private let makeEngine: @Sendable (String) throws -> WhisperTranscribing
     private var engines: [WhisperModelType: WhisperTranscribing] = [:]
     private var loadingTasks: [WhisperModelType: Task<WhisperTranscribing, Error>] = [:]
@@ -59,13 +60,21 @@ final class WhisperService {
     /// `WhisperEngine` from a model file path. Tests override it to hand back a
     /// fake `WhisperTranscribing` instead, so the routing logic below can run
     /// with no model file, no audio, and no device - see `WhisperServiceRoutingTests`.
+    /// `customDictionary` should be the same instance Settings edits, not a fresh one -
+    /// see how `MultilingualWhisperApp` constructs and threads it. Deliberately no
+    /// default value: unlike `classifier` (a plain, non-isolated struct),
+    /// `CustomDictionaryService` is `@MainActor`-isolated, and a caller forgetting to
+    /// pass the shared instance would silently construct a second, disconnected one -
+    /// making this required forces every call site to make that choice explicitly.
     init(
         modelStore: ModelStoring,
         classifier: LanguageClassifying = RuleBasedLanguageClassifier(),
+        customDictionary: CustomDictionaryService,
         makeEngine: @escaping @Sendable (String) throws -> WhisperTranscribing = { try WhisperEngine(modelPath: $0) }
     ) {
         self.modelStore = modelStore
         self.classifier = classifier
+        self.customDictionary = customDictionary
         self.makeEngine = makeEngine
     }
 
@@ -403,9 +412,10 @@ final class WhisperService {
     }
 
     private func joined(_ segments: [WhisperEngine.Segment]) -> String {
-        segments
+        let text = segments
             .map { TranscriptSanitizer.stripAnnotationTags($0.text) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+        return customDictionary.apply(to: text)
     }
 }

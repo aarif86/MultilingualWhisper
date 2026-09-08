@@ -40,7 +40,7 @@ private struct StubModelStore: ModelStoring {
 @MainActor
 final class WhisperServiceRoutingTests: XCTestCase {
     private func makeService(returning mock: MockWhisperEngine) -> WhisperService {
-        WhisperService(modelStore: StubModelStore(), makeEngine: { _ in mock })
+        WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { _ in mock })
     }
 
     /// For tests that need DIFFERENT engines per model (e.g. the default
@@ -50,7 +50,7 @@ final class WhisperServiceRoutingTests: XCTestCase {
     /// pick the right mock without `WhisperService` needing to expose model
     /// identity to its `makeEngine` factory at all.
     private func makeService(engines: [WhisperModelType: MockWhisperEngine]) -> WhisperService {
-        WhisperService(modelStore: StubModelStore(), makeEngine: { path in
+        WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { path in
             guard let match = engines.first(where: { path.contains($0.key.rawValue) })?.value else {
                 XCTFail("no mock engine registered for path \(path)")
                 return MockWhisperEngine(text: "")
@@ -125,6 +125,20 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
 
         XCTAssertEqual(result.text, "hello")
+    }
+
+    func testCustomDictionaryCorrectionsApplyToTheFinalTextEndToEnd() async throws {
+        // Pins down the actual wiring (WhisperService -> CustomDictionaryService),
+        // not just CustomDictionaryService.apply(to:) in isolation - this is exactly
+        // the class of bug this repo's routing tests already exist to catch.
+        let mock = MockWhisperEngine(text: "wah nassar can one lah")
+        let dictionary = CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests.\(UUID().uuidString)")!)
+        dictionary.add(original: "nassar", replacement: "Nasar")
+        let service = WhisperService(modelStore: StubModelStore(), customDictionary: dictionary, makeEngine: { _ in mock })
+
+        let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+
+        XCTAssertEqual(result.text, "wah Nasar can one lah")
     }
 
     // MARK: - Per-segment code-switching reprocessing

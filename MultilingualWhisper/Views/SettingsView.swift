@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
+    let customDictionaryService: CustomDictionaryService
     let flowSession: FlowSessionEngine
     @State private var showClearAllConfirmation = false
     @State private var showKeyboardSetup = false
@@ -24,9 +25,10 @@ struct SettingsView: View {
         return DebugAudioStore.latestFile()
     }
 
-    init(modelDownloadService: ModelDownloadService, flowSession: FlowSessionEngine) {
+    init(modelDownloadService: ModelDownloadService, flowSession: FlowSessionEngine, customDictionaryService: CustomDictionaryService) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
         self.flowSession = flowSession
+        self.customDictionaryService = customDictionaryService
     }
 
     /// Turning it on is async (mic permission + starting the continuous
@@ -125,6 +127,16 @@ struct SettingsView: View {
                     Text("Recording Settings")
                 } footer: {
                     Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
+                }
+
+                Section {
+                    NavigationLink {
+                        CustomDictionaryView(dictionaryService: customDictionaryService)
+                    } label: {
+                        Label("Custom Dictionary", systemImage: "textformat.abc")
+                    }
+                } footer: {
+                    Text("Teach the app words it keeps getting wrong - a name, a product, local slang. Applied after transcription, on every model.")
                 }
 
                 Section("Data Management") {

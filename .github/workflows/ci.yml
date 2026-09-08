@@ -87,7 +87,11 @@ jobs:
           echo "Using simulator: $NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Run unit tests
+      # Runs every test target wired into the MultilingualWhisper scheme's Test
+      # action (see project.yml) in one pass: the device-free unit tests plus
+      # MultilingualWhisperUITests, which actually boots this simulator and
+      # drives the real app through its accessibility tree.
+      - name: Run tests
         run: |
           xcodebuild test \
             -project MultilingualWhisper.xcodeproj \

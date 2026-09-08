@@ -111,12 +111,13 @@ to be allowed to open another app at all).
 
 ```
 MultilingualWhisper/          Swift sources (app target)
-MultilingualWhisperTests/     Unit tests (language classifier, models)
+MultilingualWhisperTests/     Device-free unit tests (language classifier, models)
+MultilingualWhisperUITests/   XCUITest UI tests (launch/navigation, real Simulator)
 vendor/whisper.cpp/           git submodule, pinned upstream
 scripts/                      Python scripts to convert HF models to GGML
 project.yml                   XcodeGen spec - generates the .xcodeproj, not checked in
 exportOptions.plist           Template for signed archive export (release.yml fills it in)
-.github/workflows/ci.yml      Unsigned Simulator build + unit tests, every push
+.github/workflows/ci.yml      Unsigned Simulator build + unit/UI tests, every push
 .github/workflows/release.yml Manual signed archive + TestFlight upload
 ```
 

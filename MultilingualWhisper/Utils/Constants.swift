@@ -130,6 +130,11 @@ enum Constants {
         "makan", "minum", "jalan", "kampung", "balik", "pergi", "datang",
         "sudah", "belum", "tolong", "terima", "kasih", "selamat", "boleh",
         "tak", "nak", "mau", "rumah",
+        // "tukar" (change/swap) was the real gap behind a genuine bug: an
+        // isolated Malay verb got swallowed into hallucinated English text
+        // instead of transcribed, so there was no keyword left in the final
+        // text for classification to catch even before considering routing.
+        "tukar",
     ]
 
     static let singlishMarkers: Set<String> = [

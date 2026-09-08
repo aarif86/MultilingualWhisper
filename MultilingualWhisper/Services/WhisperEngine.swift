@@ -126,6 +126,11 @@ actor WhisperEngine {
 /// See `WhisperServiceRoutingTests`.
 protocol WhisperTranscribing: Sendable {
     func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment]
+    /// See `WhisperEngine.detectedLanguageCode()`. Part of the protocol (not
+    /// just a `WhisperEngine`-only method) so `WhisperService`'s per-segment
+    /// code-switching reprocessing can call it without downcasting away from
+    /// this protocol - which would make that logic untestable with a fake.
+    func detectedLanguageCode() async -> String?
 }
 
 extension WhisperEngine: WhisperTranscribing {}

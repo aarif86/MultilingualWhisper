@@ -50,7 +50,7 @@ final class WhisperServiceRoutingTests: XCTestCase {
     /// pick the right mock without `WhisperService` needing to expose model
     /// identity to its `makeEngine` factory at all.
     private func makeService(engines: [WhisperModelType: MockWhisperEngine]) -> WhisperService {
-        WhisperService(modelStore: StubModelStore(), makeEngine: { path in
+        WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { path in
             guard let match = engines.first(where: { path.contains($0.key.rawValue) })?.value else {
                 XCTFail("no mock engine registered for path \(path)")
                 return MockWhisperEngine(text: "")

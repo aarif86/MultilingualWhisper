@@ -197,10 +197,11 @@ final class FlowSessionEngine {
     private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) async {
         do {
             let result: WhisperService.TranscriptionResult
+            let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)
             if let forcedModel = settings.languageMode.pinnedModel {
-                result = try await whisperService.transcribe(samples: samples, using: forcedModel)
+                result = try await whisperService.transcribe(samples: samples, using: forcedModel, chunkDurationSeconds: chunkSeconds)
             } else {
-                result = try await whisperService.transcribeWithAutoRouting(samples: samples)
+                result = try await whisperService.transcribeWithAutoRouting(samples: samples, chunkDurationSeconds: chunkSeconds)
             }
             guard !result.text.isEmpty else {
                 DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")

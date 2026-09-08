@@ -38,6 +38,16 @@ final class AppSettings {
         didSet { defaults.set(maxRecordDurationSeconds, forKey: Keys.maxRecordDuration) }
     }
 
+    /// Off by default - this app's whole positioning is "nothing you say ever
+    /// leaves your phone," and silently keeping recordings around, even
+    /// on-device only, is a real change to that promise worth an explicit
+    /// opt-in. When on, DebugAudioStore keeps the last few recordings as WAV
+    /// files so a real transcription problem can be debugged against the
+    /// actual audio instead of a typed-out description of what was said.
+    var saveDebugAudio: Bool {
+        didSet { defaults.set(saveDebugAudio, forKey: Keys.saveDebugAudio) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -46,6 +56,7 @@ final class AppSettings {
         self.autoStopOnSilence = defaults.object(forKey: Keys.autoStopOnSilence) as? Bool ?? true
         self.autoPunctuation = defaults.object(forKey: Keys.autoPunctuation) as? Bool ?? true
         self.maxRecordDurationSeconds = defaults.object(forKey: Keys.maxRecordDuration) as? Int ?? Int(Constants.chunkDurationSeconds)
+        self.saveDebugAudio = defaults.object(forKey: Keys.saveDebugAudio) as? Bool ?? false
     }
 
     private enum Keys {
@@ -54,5 +65,6 @@ final class AppSettings {
         static let autoStopOnSilence = "settings.autoStopOnSilence"
         static let autoPunctuation = "settings.autoPunctuation"
         static let maxRecordDuration = "settings.maxRecordDuration"
+        static let saveDebugAudio = "settings.saveDebugAudio"
     }
 }

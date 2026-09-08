@@ -5,18 +5,46 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
+    let flowSession: FlowSessionEngine
     @State private var showClearAllConfirmation = false
-    // Toggled after clearing the debug log to force `hasDebugLog` to
-    // re-evaluate - SwiftUI has no other reason to know the file on disk changed.
-    @State private var debugLogRefreshTrigger = false
+    @State private var showKeyboardSetup = false
+    // Toggled after clearing the debug log/audio, and on every appearance of
+    // this screen, to force hasDebugLog/latestDebugAudioURL to re-evaluate -
+    // SwiftUI has no other reason to know a file written from the Transcribe
+    // tab (a different screen entirely) has appeared on disk.
+    @State private var debugRefreshTrigger = false
 
     private var hasDebugLog: Bool {
-        _ = debugLogRefreshTrigger
+        _ = debugRefreshTrigger
         return FileManager.default.fileExists(atPath: DebugLogger.shared.fileURL.path)
     }
 
-    init(modelDownloadService: ModelDownloadService) {
+    private var latestDebugAudioURL: URL? {
+        _ = debugRefreshTrigger
+        return DebugAudioStore.latestFile()
+    }
+
+    init(modelDownloadService: ModelDownloadService, flowSession: FlowSessionEngine) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
+        self.flowSession = flowSession
+    }
+
+    /// Turning it on is async (mic permission + starting the continuous
+    /// engine - see FlowSessionEngine.activate()), but Toggle needs a plain
+    /// Binding<Bool> - fire the async work and let flowSession.isActive
+    /// (an @Observable property) drive the toggle's actual displayed state
+    /// once it resolves, rather than assuming success immediately.
+    private var flowToggleBinding: Binding<Bool> {
+        Binding(
+            get: { flowSession.isActive },
+            set: { newValue in
+                if newValue {
+                    Task { await flowSession.activate() }
+                } else {
+                    flowSession.end()
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -28,6 +56,35 @@ struct SettingsView: View {
                             Text(mode.rawValue).tag(mode)
                         }
                     }
+                }
+
+                Section {
+                    Button {
+                        showKeyboardSetup = true
+                    } label: {
+                        Label("Set Up Keyboard", systemImage: "keyboard")
+                    }
+                } footer: {
+                    Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
+                }
+
+                Section {
+                    Toggle("Flow", isOn: flowToggleBinding)
+
+                    if flowSession.isRecording {
+                        Label("Listening\u{2026}", systemImage: "waveform")
+                            .foregroundStyle(.green)
+                    }
+
+                    if let error = flowSession.lastError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Flow")
+                } footer: {
+                    Text("When on, dictate straight from the Nasar Flow keyboard in any app - no need to open Nasar Flow for each dictation. This keeps the microphone engine running in the background while it's on, so turn it off when you're done to save battery.")
                 }
 
                 Section {
@@ -93,14 +150,37 @@ struct SettingsView: View {
                     Button("Clear Debug Log", role: .destructive) {
                         Task {
                             await DebugLogger.shared.clear()
-                            debugLogRefreshTrigger.toggle()
+                            debugRefreshTrigger.toggle()
                         }
                     }
                     .disabled(!hasDebugLog)
                 } header: {
                     Text("Debug Log")
                 } footer: {
-                    Text("A local, on-device log of recording/transcription activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                    Text("A local, on-device log of recording/transcription/keyboard activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                }
+
+                Section {
+                    Toggle("Save Recordings", isOn: $viewModel.saveDebugAudio)
+
+                    if let audioURL = latestDebugAudioURL {
+                        ShareLink(item: audioURL) {
+                            Label("Share Latest Recording", systemImage: "waveform")
+                        }
+                    } else {
+                        Label("Share Latest Recording", systemImage: "waveform")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Clear Saved Recordings", role: .destructive) {
+                        DebugAudioStore.clear()
+                        debugRefreshTrigger.toggle()
+                    }
+                    .disabled(latestDebugAudioURL == nil)
+                } header: {
+                    Text("Debug Recordings")
+                } footer: {
+                    Text("Off by default. When on, keeps your last few recordings as audio files on-device (never uploaded) so a transcription problem can be checked against what you actually said, not just described. Turn this off again once you're done debugging.")
                 }
 
                 Section("About") {
@@ -111,6 +191,10 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear { debugRefreshTrigger.toggle() }
+            .sheet(isPresented: $showKeyboardSetup) {
+                KeyboardSetupView()
+            }
             .confirmationDialog(
                 "Delete all transcriptions? This can't be undone.",
                 isPresented: $showClearAllConfirmation,

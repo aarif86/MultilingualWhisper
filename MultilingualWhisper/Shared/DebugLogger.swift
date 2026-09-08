@@ -4,9 +4,17 @@ import Foundation
 /// anywhere automatically, matching the app's "nothing you say ever leaves your
 /// phone" promise. It exists because this app is built and tested without a Mac
 /// or a physical device on hand: when something breaks silently (a recording
-/// that produces no text, an error that only flashes past), a real log the user
-/// can export from Settings and hand over is worth far more than a text
-/// description of the symptom - see the "Share Debug Log" button in Settings.
+/// that produces no text, a keyboard-extension hand-off that silently no-ops),
+/// a real log the user can export from Settings and hand over is worth far more
+/// than a text description of the symptom - see the "Share Debug Log" button in
+/// Settings.
+///
+/// Lives in `Shared/` (not `Utils/`) and writes into the App Group container,
+/// not the main app's own Documents directory - each app extension gets its own
+/// separate sandbox, so a keyboard-extension-only bug (like the "Dictate" button
+/// silently not launching the app) would otherwise be completely invisible to
+/// this logger. The main app's Settings screen only ever reads/shares/clears the
+/// file; both processes can append to it.
 actor DebugLogger {
     static let shared = DebugLogger()
 
@@ -19,13 +27,22 @@ actor DebugLogger {
     private let maxBytes = 1_000_000
 
     private init() {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        fileURL = dir.appendingPathComponent("debug.log")
+        // Falls back to the process's own Documents directory if the App Group
+        // container is ever unavailable (shouldn't happen now that both targets
+        // declare the capability, but this should never be the reason logging
+        // itself crashes) - that copy just won't be visible across processes.
+        if let groupDir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: DictationHandoff.appGroupID) {
+            fileURL = groupDir.appendingPathComponent("debug.log")
+        } else {
+            let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            fileURL = dir.appendingPathComponent("debug.log")
+        }
     }
 
     /// Fire-and-forget from any isolation context (main actor, the WhisperEngine
-    /// actor, etc.) - hops onto this actor internally to do the actual write, so
-    /// callers never need `await` just to leave a log line.
+    /// actor, the keyboard extension's view controller, etc.) - hops onto this
+    /// actor internally to do the actual write, so callers never need `await`
+    /// just to leave a log line.
     nonisolated func log(_ message: String, category: String = "app") {
         Task { await self.append(message, category: category) }
     }

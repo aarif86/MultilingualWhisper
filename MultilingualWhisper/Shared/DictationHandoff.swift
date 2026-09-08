@@ -20,9 +20,18 @@ enum DictationHandoff {
     /// registered in the main app's Info.plist via CFBundleURLTypes.
     static let urlScheme = "nasarflow"
     static let dictateHost = "dictate"
+    /// Launches the "Flow is on" activation screen (FlowActivationView)
+    /// instead of a one-shot QuickDictateView recording - see
+    /// FlowSessionEngine for why this is a genuinely different flow, not
+    /// just a different screen.
+    static let startFlowHost = "startflow"
 
     static var launchURL: URL {
         URL(string: "\(urlScheme)://\(dictateHost)")!
+    }
+
+    static var startFlowURL: URL {
+        URL(string: "\(urlScheme)://\(startFlowHost)")!
     }
 
     private static let pendingTextKey = "dictation.pendingText"

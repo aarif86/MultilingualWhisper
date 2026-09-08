@@ -1,0 +1,145 @@
+name: Quantize models
+
+# Manual, occasional-use maintenance job - not run automatically. Builds
+# whisper.cpp's own native `whisper-quantize` + `whisper-cli` tools (this repo
+# has no local Mac/compiler to do that on) and produces q5_1 versions of the
+# three custom-converted models (Singlish, Malay, Arabic). Per whisper.cpp's
+# own quantization research, q5_1 loses under ~1% WER versus full precision
+# while roughly halving file size - see PR/commit message for the source.
+#
+# Deliberately does NOT publish the quantized files to the release itself -
+# it uploads them as a workflow artifact instead, so the before/after
+# transcription comparison in this job's log can be reviewed before deciding
+# to actually ship them (that's a separate, manual `gh release upload` step).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  quantize:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install cmake
+        run: brew install cmake
+
+      # Plain native macOS build (not build-xcframework.sh, which is
+      # iOS-specific) - just needs the whisper-quantize and whisper-cli tools
+      # to run on the runner itself.
+      - name: Build whisper.cpp native tools
+        run: |
+          set -euo pipefail
+          cmake -S vendor/whisper.cpp -B vendor/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_EXAMPLES=ON
+          cmake --build vendor/whisper.cpp/build --config Release -j"$(sysctl -n hw.ncpu)" --target whisper-quantize --target whisper-cli
+          find vendor/whisper.cpp/build -name 'whisper-quantize' -o -name 'whisper-cli'
+
+      - name: Locate built binaries
+        id: bins
+        run: |
+          set -euo pipefail
+          QUANTIZE_BIN=$(find vendor/whisper.cpp/build -type f -name 'whisper-quantize' | head -n1)
+          CLI_BIN=$(find vendor/whisper.cpp/build -type f -name 'whisper-cli' | head -n1)
+          test -x "$QUANTIZE_BIN"
+          test -x "$CLI_BIN"
+          echo "quantize=$QUANTIZE_BIN" >> "$GITHUB_OUTPUT"
+          echo "cli=$CLI_BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Download current models
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p models-original
+          gh release download models-v1 --repo "$GITHUB_REPOSITORY" \
+            --pattern 'ggml-small-singlish.bin' \
+            --pattern 'ggml-small-malay.bin' \
+            --pattern 'ggml-small-arabic.bin' \
+            --dir models-original
+          ls -la models-original
+
+      - name: Quantize to q5_1
+        run: |
+          set -euo pipefail
+          mkdir -p models-quantized
+          QUANTIZE="${{ steps.bins.outputs.quantize }}"
+          for name in singlish malay arabic; do
+            "$QUANTIZE" "models-original/ggml-small-$name.bin" "models-quantized/ggml-small-$name-q5_1.bin" q5_1
+          done
+          echo ""
+          echo "=== Size comparison ==="
+          for name in singlish malay arabic; do
+            orig=$(stat -f%z "models-original/ggml-small-$name.bin")
+            quant=$(stat -f%z "models-quantized/ggml-small-$name-q5_1.bin")
+            pct=$(awk -v o="$orig" -v q="$quant" 'BEGIN{printf "%.0f", q*100/o}')
+            printf '%-10s %10d -> %10d bytes (%s%%)\n' "$name" "$orig" "$quant" "$pct"
+          done
+
+      # Sanity-check transcription quality, original vs quantized, on real
+      # audio - not a rigorous WER benchmark, just confirming quantization
+      # didn't produce garbage. Malay uses the model's own real linked test
+      # clip (already verified against the source PyTorch model - see
+      # scripts/convert_malay_model.py's commit). Singlish/Arabic use macOS's
+      # built-in `say` TTS since no bundled real test audio exists for them -
+      # `say -v '?'` output is printed first so it's visible which voices this
+      # runner actually has, since non-English voice packs aren't guaranteed
+      # to be present on a fresh runner image.
+      - name: Generate test audio
+        run: |
+          set -euo pipefail
+          mkdir -p test-audio
+          echo "Available voices:"
+          say -v '?' || true
+
+          say -o test-audio/singlish.aiff "Wah shiok already lah, jalan jalan cari makan then balik house"
+          afconvert -f WAVE -d LEI16@16000 -c 1 test-audio/singlish.aiff test-audio/singlish.wav
+
+          ARABIC_VOICE=$(say -v '?' | grep -i 'ar_' | head -n1 | awk '{print $1}' || true)
+          if [ -n "$ARABIC_VOICE" ]; then
+            say -v "$ARABIC_VOICE" -o test-audio/arabic.aiff "بسم الله الرحمن الرحيم، ان شاء الله"
+          else
+            echo "No Arabic voice available on this runner - using an English voice on the same romanized phrase instead."
+            say -o test-audio/arabic.aiff "Bismillah, Insya Allah, Alhamdulillah"
+          fi
+          afconvert -f WAVE -d LEI16@16000 -c 1 test-audio/arabic.aiff test-audio/arabic.wav
+
+          curl -sL -o test-audio/malay.mp3 "https://huggingface.co/datasets/huseinzol05/malaya-speech-stt-test-set/resolve/main/test.mp3"
+          afconvert -f WAVE -d LEI16@16000 -c 1 test-audio/malay.mp3 test-audio/malay.wav
+
+      - name: Compare transcriptions (original vs quantized)
+        run: |
+          set -euo pipefail
+          CLI="${{ steps.bins.outputs.cli }}"
+          # A plain case statement rather than an associative array - macOS's
+          # default /bin/bash is 3.2 (no `declare -A` support), and this step
+          # isn't worth risking that portability gap for.
+          for name in singlish malay arabic; do
+            case "$name" in
+              singlish) hint=en ;;
+              malay) hint=ms ;;
+              arabic) hint=ar ;;
+            esac
+            echo ""
+            echo "=================================================="
+            echo "== $name (language hint: $hint)"
+            echo "=================================================="
+            echo "--- original (f16) ---"
+            "$CLI" -m "models-original/ggml-small-$name.bin" -f "test-audio/$name.wav" -l "$hint" -nt
+            echo "--- quantized (q5_1) ---"
+            "$CLI" -m "models-quantized/ggml-small-$name-q5_1.bin" -f "test-audio/$name.wav" -l "$hint" -nt
+          done
+
+      - name: Upload quantized models
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantized-models-q5_1
+          path: models-quantized/*.bin

@@ -27,6 +27,16 @@ targets:
       properties:
         CFBundleDisplayName: "Nasar Flow"
         NSMicrophoneUsageDescription: "Nasar Flow needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
+        # Lets FlowSessionEngine's audio engine keep running while the app is
+        # backgrounded - required for the keyboard's "Flow" session (activate
+        # once, dictate repeatedly from the keyboard afterwards) to work at
+        # all. A legitimate, Apple-documented background-mode use ("the app
+        # records audio content while in the background"), not a workaround -
+        # see FlowSessionEngine's doc comment for the part of this that's
+        # still genuinely unverified (whether the engine has to be actively
+        # running, vs merely "active", to actually keep the app alive).
+        UIBackgroundModes:
+          - audio
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
         # Both reference build settings rather than hardcoding values, so
@@ -52,18 +62,16 @@ targets:
           - CFBundleURLSchemes:
               - nasarflow
             CFBundleURLName: com.multilingualwhisper.app
-    # Temporarily NOT declaring the App Groups entitlement here - same reason as
-    # NasarFlowKeyboard's embed:true being commented out below: the existing
-    # "Nasar Flow" profile predates App Groups on this App ID, so it doesn't
-    # have the capability yet, and a signed archive fails immediately if the
-    # entitlements file asks for something the profile doesn't grant. Add this
-    # back (and re-embed the keyboard target) once App Groups is enabled on
-    # both App IDs and both profiles are re-generated/created (see README).
-    # entitlements:
-    #   path: Generated/MultilingualWhisper.entitlements
-    #   properties:
-    #     com.apple.security.application-groups:
-    #       - group.com.multilingualwhisper.app
+    # Re-enabled 2026-09-07: App Groups is now on both App IDs, and both
+    # profiles ("Nasar Flow" regenerated, "Nasar Flow Keyboard" newly created)
+    # grant it - see the matching embed:true re-enable on NasarFlowKeyboard
+    # below, which must ship together with this (a signed archive fails
+    # immediately if only one side of the pair is present).
+    entitlements:
+      path: Generated/MultilingualWhisper.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.multilingualwhisper.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.multilingualwhisper.app
@@ -99,16 +107,11 @@ targets:
       # ever copies the actual dylib into the app bundle's Frameworks/ folder.
       - framework: vendor/whisper.cpp/build-apple/whisper.xcframework
         embed: true
-      # Temporarily NOT embedded: release.yml needs a second provisioning
-      # profile ("Nasar Flow Keyboard") that doesn't exist in Apple's portal
-      # yet (see README's "Keyboard extension" section for the setup steps).
-      # Embedding it here would make every release fail at signing until that's
-      # done, which would needlessly block shipping unrelated fixes in the
-      # meantime. Re-add `embed: true` once that secret/profile exists - the
-      # NasarFlowKeyboard target itself, and all its code, stays fully intact
-      # either way; this line is the only thing gating it out of a release build.
-      # - target: NasarFlowKeyboard
-      #   embed: true
+      # Re-enabled 2026-09-07 alongside the main target's App Groups
+      # entitlement above - both App IDs have App Groups now, and the
+      # APPLE_KEYBOARD_PROVISIONING_PROFILE_BASE64 secret is set.
+      - target: NasarFlowKeyboard
+        embed: true
     scheme:
       testTargets:
         - MultilingualWhisperTests

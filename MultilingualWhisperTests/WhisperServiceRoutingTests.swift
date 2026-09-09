@@ -244,4 +244,36 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let callCount = await singlishMock.callCount
         XCTAssertEqual(callCount, 1, "should be only the draft pass - too short to spend a probe call on")
     }
+
+    // MARK: - Chunk duration (Settings' "Chunk length" - previously persisted but never read)
+
+    func testChunkDurationSecondsActuallyControlsChunkBoundaries() async throws {
+        // 2.5s of audio. A 1s chunk window must split this into 3 decode calls
+        // (0-1s, 1-2s, 2-2.5s) - if this parameter were silently ignored (the
+        // exact bug being fixed here), it would fall back to the 30s default
+        // and this whole clip would fit in a single call instead.
+        let mock = MockWhisperEngine(text: "chunk")
+        let service = makeService(returning: mock)
+        let samples = Array(repeating: Float(0.1), count: 40_000) // 2.5s @ 16kHz
+
+        _ = try await service.transcribe(samples: samples, using: .singlish, chunkDurationSeconds: 1.0)
+
+        let callCount = await mock.callCount
+        XCTAssertEqual(callCount, 3, "1s chunks over 2.5s of audio should decode in 3 pieces, not 1")
+    }
+
+    func testChunkDurationSecondsDefaultsToTheOriginalThirtySecondBehavior() async throws {
+        // Same 2.5s clip as above, but with no chunkDurationSeconds argument -
+        // callers that don't pass one (tests, and any future forced-model call
+        // site) must keep getting the original ~30s-window behavior, not a
+        // breaking change in disguise.
+        let mock = MockWhisperEngine(text: "chunk")
+        let service = makeService(returning: mock)
+        let samples = Array(repeating: Float(0.1), count: 40_000) // 2.5s @ 16kHz - well under 30s
+
+        _ = try await service.transcribe(samples: samples, using: .singlish)
+
+        let callCount = await mock.callCount
+        XCTAssertEqual(callCount, 1, "2.5s of audio is nowhere near the default 30s window - should be a single call")
+    }
 }

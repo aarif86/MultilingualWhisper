@@ -100,14 +100,27 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
         // Malay markers with no Singlish particles alongside them: dominant/pure
         // Malay, not code-switching - route to the dedicated Malay model instead
         // of leaving it on Singlish (which only needs to handle *embedded* Malay
-        // loanwords, the case above where singlishHits > 0 too). Same
-        // conservative confidence formula as the Arabic-dominant branch above -
-        // a single loanword-level hit won't trigger a full re-decode on its own.
+        // loanwords, the case above where singlishHits > 0 too).
+        //
+        // Real bug this guards against: a deliberate language switch (a plain-
+        // English clause with no Singlish-specific slang, plus a short Malay
+        // clause) was reading as confidently "dominant Malay" from raw keyword
+        // count alone, with no regard for how much of the utterance that
+        // actually accounted for - and WhisperService re-decodes the ENTIRE
+        // clip once confidence crosses its reroute threshold, clobbering the
+        // perfectly good English portion in the process. Scaling by how much
+        // of the text's own words are matched Malay keywords (not just the
+        // absolute count) keeps a short embedded clause below that threshold,
+        // so per-segment reprocessing gets a chance to isolate just the Malay
+        // part instead - while a clip that's genuinely all/mostly Malay still
+        // has a high match ratio and reaches full confidence as before.
         if malayHits > 0 {
+            let dominanceRatio = Float(malayHits) / Float(words.count)
+            let confidence = min(1, 0.4 + Float(malayHits) * 0.15) * min(1, dominanceRatio * 4)
             return LanguageClassification(
                 recommendedModel: .malay,
                 languageTag: .malay,
-                confidence: min(1, 0.4 + Float(malayHits) * 0.15),
+                confidence: confidence,
                 components: components
             )
         }

@@ -82,6 +82,27 @@ final class LanguageClassifierTests: XCTestCase {
         XCTAssertEqual(result.recommendedModel, .singlish)
     }
 
+    func testDominantMalayWithNoSinglishMarkersStillReachesFullConfidence() {
+        // Companion to the ratio-dampening test below - a clip that's
+        // genuinely all/mostly Malay must still reach a high enough
+        // confidence to actually reroute, not get dampened along with it.
+        let result = classifier.classify(text: "Nak pergi makan tak? Jalan sekarang.")
+        XCTAssertGreaterThanOrEqual(result.confidence, 0.6)
+    }
+
+    func testMalayClauseInAnOtherwiseLongPlainEnglishSentenceDoesNotForceAWholeClipReroute() {
+        // Real bug: a deliberate language switch (a plain-English clause with
+        // no Singlish-specific slang, plus a short Malay clause) read as
+        // confidently "dominant Malay" from raw keyword count alone, which
+        // made WhisperService re-decode the ENTIRE clip with the Malay model
+        // - clobbering the perfectly good English portion instead of letting
+        // per-segment reprocessing isolate just the Malay clause. A short
+        // embedded clause inside a much longer non-Malay utterance must stay
+        // below WhisperService's 0.6 reroute threshold.
+        let result = classifier.classify(text: "I finished my work at the office today and I want to jalan jalan cari makan")
+        XCTAssertLessThan(result.confidence, 0.6)
+    }
+
     func testPlainEnglishFallsBackToLowConfidenceEnglish() {
         let result = classifier.classify(text: "The weather today is quite pleasant")
         XCTAssertEqual(result.recommendedModel, .singlish)

@@ -152,7 +152,11 @@ final class TranscriptionViewModel {
 
         let model = settings.languageMode.pinnedModel ?? .singlish
         do {
-            let result = try await whisperService.transcribe(samples: snapshot, using: model)
+            let result = try await whisperService.transcribe(
+                samples: snapshot,
+                using: model,
+                chunkDurationSeconds: TimeInterval(settings.maxRecordDurationSeconds)
+            )
             guard isRecording else { return } // stopped for real while this was running
             transcript = applyPunctuationPreference(to: result.text)
         } catch {
@@ -185,10 +189,11 @@ final class TranscriptionViewModel {
         Task {
             do {
                 let result: WhisperService.TranscriptionResult
+                let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)
                 if let forcedModel = settings.languageMode.pinnedModel {
-                    result = try await whisperService.transcribe(samples: samples, using: forcedModel)
+                    result = try await whisperService.transcribe(samples: samples, using: forcedModel, chunkDurationSeconds: chunkSeconds)
                 } else {
-                    result = try await whisperService.transcribeWithAutoRouting(samples: samples)
+                    result = try await whisperService.transcribeWithAutoRouting(samples: samples, chunkDurationSeconds: chunkSeconds)
                 }
 
                 let finalText = applyPunctuationPreference(to: result.text)

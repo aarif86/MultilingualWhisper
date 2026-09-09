@@ -28,7 +28,7 @@ struct FlowActivationView: View {
                 .font(.title2.bold())
 
             if flowSession.isActive {
-                Text("Dictate straight from the Nasar Flow keyboard now - no need to open this app again until you turn Flow off in Settings.")
+                Text("It's already listening - swipe back and start talking whenever you're ready. No need to open this app again until you turn Flow off.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

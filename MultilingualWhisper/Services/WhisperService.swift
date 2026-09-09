@@ -118,14 +118,24 @@ final class WhisperService {
 
     /// Forces a specific model - used by the "Force Singlish / Arabic / English"
     /// settings modes. Still classifies the resulting text purely for history tagging.
-    func transcribe(samples: [Float], using model: WhisperModelType) async throws -> TranscriptionResult {
+    ///
+    /// `chunkDurationSeconds` defaults to `Constants.chunkDurationSeconds` for any
+    /// caller that doesn't care (tests, forced-model paths with no Settings access) -
+    /// real UI call sites pass Settings' own "Chunk length" value, previously a
+    /// persisted-but-never-read setting (see `AppSettings.maxRecordDurationSeconds`).
+    func transcribe(
+        samples: [Float],
+        using model: WhisperModelType,
+        chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
+    ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
         let engine = try await loadEngine(for: model)
         let text = try await runChunked(
             samples: samples,
             engine: engine,
             languageHint: model.languageHint,
-            initialPrompt: model.initialPrompt
+            initialPrompt: model.initialPrompt,
+            chunkDurationSeconds: chunkDurationSeconds
         )
         let classification = classifier.classify(text: text)
         return TranscriptionResult(
@@ -144,7 +154,8 @@ final class WhisperService {
     func transcribeWithAutoRouting(
         samples: [Float],
         defaultModel: WhisperModelType = .singlish,
-        reroutingConfidenceThreshold: Float = 0.6
+        reroutingConfidenceThreshold: Float = 0.6,
+        chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
 
@@ -164,7 +175,8 @@ final class WhisperService {
             samples: samples,
             engine: firstEngine,
             languageHint: effectiveDefaultModel.languageHint,
-            initialPrompt: effectiveDefaultModel.initialPrompt
+            initialPrompt: effectiveDefaultModel.initialPrompt,
+            chunkDurationSeconds: chunkDurationSeconds
         )
         let draftText = draftSegments.map(\.text).joined(separator: " ")
         let classification = classifier.classify(text: draftText)
@@ -193,7 +205,8 @@ final class WhisperService {
                 samples: samples,
                 engine: betterEngine,
                 languageHint: classification.recommendedModel.languageHint,
-                initialPrompt: classification.recommendedModel.initialPrompt
+                initialPrompt: classification.recommendedModel.initialPrompt,
+                chunkDurationSeconds: chunkDurationSeconds
             )
             return TranscriptionResult(
                 text: finalText,
@@ -351,7 +364,8 @@ final class WhisperService {
         samples: [Float],
         engine: WhisperTranscribing,
         languageHint: String?,
-        initialPrompt: String? = nil
+        initialPrompt: String? = nil,
+        chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> String {
         // The single choke point every decode (live preview and final result,
         // every model) passes through - the most useful place to log, since a
@@ -359,11 +373,11 @@ final class WhisperService {
         // between "audio capture produced nothing" and "whisper.cpp decoded to
         // nothing" without this.
         DebugLogger.shared.log(
-            "decode start: samples=\(samples.count) hint=\(languageHint ?? "nil") promptChars=\(initialPrompt?.count ?? 0)",
+            "decode start: samples=\(samples.count) hint=\(languageHint ?? "nil") promptChars=\(initialPrompt?.count ?? 0) chunkSeconds=\(chunkDurationSeconds)",
             category: "whisper"
         )
         do {
-            let text = try await runChunkedUninstrumented(samples: samples, engine: engine, languageHint: languageHint, initialPrompt: initialPrompt)
+            let text = try await runChunkedUninstrumented(samples: samples, engine: engine, languageHint: languageHint, initialPrompt: initialPrompt, chunkDurationSeconds: chunkDurationSeconds)
             DebugLogger.shared.log("decode done: textLen=\(text.count)", category: "whisper")
             return text
         } catch {
@@ -376,9 +390,10 @@ final class WhisperService {
         samples: [Float],
         engine: WhisperTranscribing,
         languageHint: String?,
-        initialPrompt: String?
+        initialPrompt: String?,
+        chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> String {
-        let chunkSize = Int(Constants.chunkDurationSeconds * Constants.sampleRate)
+        let chunkSize = Int(chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {
             let segments = try await engine.transcribe(
                 samples: samples,
@@ -413,9 +428,10 @@ final class WhisperService {
         samples: [Float],
         engine: WhisperTranscribing,
         languageHint: String?,
-        initialPrompt: String?
+        initialPrompt: String?,
+        chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> [TimedSegment] {
-        let chunkSize = Int(Constants.chunkDurationSeconds * Constants.sampleRate)
+        let chunkSize = Int(chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {
             let segments = try await engine.transcribe(
                 samples: samples,

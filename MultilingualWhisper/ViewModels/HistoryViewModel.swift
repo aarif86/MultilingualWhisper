@@ -44,6 +44,40 @@ final class HistoryViewModel {
             .map { (label: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
     }
 
+    /// Total words spoken today - the "words" half of Home's stat chip.
+    /// Recomputed live from real saved transcriptions rather than a
+    /// separately tracked counter, so it can never drift from History.
+    func wordsToday(_ transcriptions: [Transcription]) -> Int {
+        let calendar = Calendar.current
+        return transcriptions
+            .filter { calendar.isDateInToday($0.date) }
+            .reduce(0) { $0 + $1.wordCount }
+    }
+
+    /// Consecutive days with at least one transcription, counting back from
+    /// today. Still counts through today even before anything's been said
+    /// yet - a streak only actually breaks once a full day passes with
+    /// nothing at all, same as how Duolingo-style streaks read "so far".
+    func streak(_ transcriptions: [Transcription]) -> Int {
+        let calendar = Calendar.current
+        let days = Set(transcriptions.map { calendar.startOfDay(for: $0.date) })
+        guard !days.isEmpty else { return 0 }
+
+        var cursor = calendar.startOfDay(for: Date())
+        if !days.contains(cursor) {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
+            cursor = yesterday
+        }
+
+        var count = 0
+        while days.contains(cursor) {
+            count += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return count
+    }
+
     func delete(_ transcription: Transcription, context: ModelContext) {
         context.delete(transcription)
         try? context.save()

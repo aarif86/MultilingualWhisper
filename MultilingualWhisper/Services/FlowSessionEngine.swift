@@ -114,8 +114,16 @@ final class FlowSessionEngine {
         isActive = true
         lastError = nil
         FlowSessionState.isActive = true
-        DarwinNotification.post(FlowSessionState.stateChanged)
         DebugLogger.shared.log("FlowSession activated - engine running continuously", category: "flow")
+        // Start capturing the very first utterance immediately, rather than
+        // waiting for a separate keyboard tap on top of Start Flow + swiping
+        // back - the continuous engine above is already running the mic by
+        // this point (that's the whole reason it has to be continuous), so
+        // making the user tap "Tap to speak" again right after was a pure
+        // extra step, not a real second decision. handleStartSignal() posts
+        // its own stateChanged notification, which covers isActive and
+        // isRecording flipping together in one push to the keyboard.
+        handleStartSignal()
         return true
     }
 
@@ -197,10 +205,11 @@ final class FlowSessionEngine {
     private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) async {
         do {
             let result: WhisperService.TranscriptionResult
+            let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)
             if let forcedModel = settings.languageMode.pinnedModel {
-                result = try await whisperService.transcribe(samples: samples, using: forcedModel)
+                result = try await whisperService.transcribe(samples: samples, using: forcedModel, chunkDurationSeconds: chunkSeconds)
             } else {
-                result = try await whisperService.transcribeWithAutoRouting(samples: samples)
+                result = try await whisperService.transcribeWithAutoRouting(samples: samples, chunkDurationSeconds: chunkSeconds)
             }
             guard !result.text.isEmpty else {
                 DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")

@@ -117,6 +117,37 @@ app → General → Keyboard → Keyboards → Add New Keyboard → Nasar Flow**
 tap it again and turn on **Allow Full Access** (required - a keyboard needs it
 to be allowed to open another app at all).
 
+## Voice commands
+
+**Long-press** the keyboard's mic instead of tapping it, and the next utterance
+is a command, never text. That gesture *is* the boundary - the app never
+guesses whether "new line" was meant literally, which is the mistake Dragon
+still makes after a decade. Twelve commands, matching Apple Dictation, Windows
+Voice Access and Gboard so muscle memory carries over, in English, standard
+Malay and Modern Standard Arabic (`MultilingualWhisper/Shared/VoiceCommand.swift`;
+colloquial and Singlish forms are left for native speakers to add):
+
+| Say | Does |
+|---|---|
+| new line · baris baru · سطر جديد | line break |
+| new paragraph · perenggan baru · فقرة جديدة | blank line |
+| delete that / scratch that / undo · padam itu · احذف ذلك | removes the last dictation while it is still at the cursor, else the last word |
+| delete word · padam perkataan · احذف كلمة | last word |
+| delete line · padam baris · احذف السطر | back to the start of the line |
+| full stop / period · noktah · نقطة | `.` attached to the previous word |
+| comma · koma · فاصلة | `,` |
+| question mark · tanda soal · علامة استفهام | `?` |
+| exclamation mark · tanda seru · علامة تعجب | `!` |
+| capitalise that · huruf besar | Tampines |
+| all caps that · semua huruf besar | MRT |
+| lowercase that · huruf kecil | mrt |
+| literally / type / insert … · tulis … · اكتب … | inserts the rest as ordinary text |
+
+Anything else said in command mode shows up in the keyboard as "Not a command
+I know: '…'" with Insert and Dismiss buttons, so nothing is silently lost.
+Every edit is planned by `CommandPlanner` (pure, unit-tested) as
+`deleteBackward`/`insertText` calls on the text field.
+
 ## Shortcuts, Siri, Action Button, Back Tap
 
 Three App Intents (`MultilingualWhisper/App/NasarFlowIntents.swift`) are

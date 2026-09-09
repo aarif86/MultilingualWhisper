@@ -34,6 +34,8 @@ enum FlowSessionState {
     private static let lastFailureKey = "flow.lastFailureAt"
     private static let idleDeadlineKey = "flow.idleDeadline"
     private static let lastIdleTimeoutKey = "flow.lastIdleTimeoutAt"
+    private static let requestedCommandModeKey = "flow.requestedCommandMode"
+    private static let utteranceIsCommandKey = "flow.utteranceIsCommand"
 
     private static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: DictationHandoff.appGroupID)
@@ -88,6 +90,28 @@ enum FlowSessionState {
         set { sharedDefaults?.set(newValue, forKey: lastIdleTimeoutKey) }
     }
 
+    /// Set by the keyboard just before posting `startUtterance` when the user
+    /// long-pressed the mic: the next utterance is a command, not dictation.
+    /// Consumed (cleared) by the app when it starts capturing, so a stale flag
+    /// can never turn a later ordinary dictation into a command.
+    static var requestedCommandMode: Bool {
+        get { sharedDefaults?.bool(forKey: requestedCommandModeKey) ?? false }
+        set { sharedDefaults?.set(newValue, forKey: requestedCommandModeKey) }
+    }
+
+    static func consumeRequestedCommandMode() -> Bool {
+        let requested = requestedCommandMode
+        requestedCommandMode = false
+        return requested
+    }
+
+    /// Whether the utterance being captured right now is a command - lets the
+    /// keyboard label the listening state accordingly.
+    static var utteranceIsCommand: Bool {
+        get { sharedDefaults?.bool(forKey: utteranceIsCommandKey) ?? false }
+        set { sharedDefaults?.set(newValue, forKey: utteranceIsCommandKey) }
+    }
+
     /// Called when a session ends (explicitly, or the app decides to time it
     /// out) so the keyboard falls back to "Start" instead of a stale
     /// listening-capable state that no longer actually works.
@@ -97,5 +121,7 @@ enum FlowSessionState {
         utteranceStartedAt = nil
         lastFailureAt = nil
         idleDeadline = nil
+        requestedCommandMode = false
+        utteranceIsCommand = false
     }
 }

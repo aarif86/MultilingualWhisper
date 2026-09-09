@@ -63,4 +63,25 @@ enum DictationHandoff {
         sharedDefaults?.removeObject(forKey: pendingTextKey)
         sharedDefaults?.removeObject(forKey: pendingDateKey)
     }
+
+    // MARK: - Commands (command-mode utterances, see VoiceCommand)
+
+    private static let pendingCommandKey = "dictation.pendingCommand"
+
+    /// Called by the main app when a command-mode utterance has been interpreted
+    /// - either a recognised command, or `Payload.unrecognized(text)` so the
+    /// keyboard can explain what it heard instead of silently doing nothing.
+    static func publishCommand(_ payload: VoiceCommand.Payload) {
+        guard let defaults = sharedDefaults, let data = try? JSONEncoder().encode(payload) else { return }
+        defaults.set(data, forKey: pendingCommandKey)
+    }
+
+    static func pendingCommand() -> VoiceCommand.Payload? {
+        guard let data = sharedDefaults?.data(forKey: pendingCommandKey) else { return nil }
+        return try? JSONDecoder().decode(VoiceCommand.Payload.self, from: data)
+    }
+
+    static func clearPendingCommand() {
+        sharedDefaults?.removeObject(forKey: pendingCommandKey)
+    }
 }

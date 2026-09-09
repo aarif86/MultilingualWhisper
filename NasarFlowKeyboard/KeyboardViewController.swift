@@ -40,6 +40,9 @@ final class KeyboardViewController: UIInputViewController {
     private var suggestionDismissed = false
     private var lastCheckedContext: String?
     private let learnedStore = LearnedCorrectionsStore.shared
+    /// What the app heard in command mode when it matched no command - shown so
+    /// the user can insert it as text or dismiss it, never silently dropped.
+    private var unrecognizedCommandText: String?
     private var flowPhase: FlowPhase = .idle
     private var tickTimer: Timer?
     private var phaseTimeoutTimer: Timer?
@@ -157,8 +160,12 @@ final class KeyboardViewController: UIInputViewController {
             hasFullAccess: hasFullAccess,
             lastInsertedText: lastInsertedText,
             suggestedCorrection: suggestedCorrection,
+            unrecognizedCommand: unrecognizedCommandText,
             flowState: currentFlowUIState(),
             onStartListening: { [weak self] in self?.startListening() },
+            onStartCommand: { [weak self] in self?.startCommandListening() },
+            onInsertUnrecognized: { [weak self] in self?.insertUnrecognizedAsText() },
+            onDismissUnrecognized: { [weak self] in self?.dismissUnrecognized() },
             onStopListening: { [weak self] in self?.stopListening() },
             onUndoInsert: { [weak self] in self?.undoLastInsert() },
             onLearnCorrection: { [weak self] in self?.learnSuggestedCorrection() },
@@ -175,8 +182,60 @@ final class KeyboardViewController: UIInputViewController {
     /// load, tick, Darwin notification, viewWillAppear/textDidChange) since
     /// they all funnel through refresh() or this same call in viewDidLoad.
     private func autoInsertPendingResult() {
+        if let payload = DictationHandoff.pendingCommand() {
+            DictationHandoff.clearPendingCommand()
+            executeCommand(payload)
+        }
         guard let pending = DictationHandoff.pending() else { return }
         insert(pending.text)
+    }
+
+    // MARK: - Voice commands (command mode = long-press the mic)
+
+    private func startCommandListening() {
+        DebugLogger.shared.log("Flow: command mode requested", category: "keyboard")
+        FlowSessionState.requestedCommandMode = true
+        startListening()
+    }
+
+    /// Applies a command through the planner - every edit is a plain
+    /// deleteBackward()/insertText() on the proxy, the same primitives the undo
+    /// row and the letter keys already use.
+    private func executeCommand(_ payload: VoiceCommand.Payload) {
+        if payload.isUnrecognized {
+            unrecognizedCommandText = payload.argument
+            return
+        }
+        guard let command = VoiceCommand(payload: payload) else { return }
+        let ops = CommandPlanner.plan(
+            command,
+            contextBefore: textDocumentProxy.documentContextBeforeInput ?? "",
+            lastInserted: lastInsertedText
+        )
+        DebugLogger.shared.log("Flow: executing \(command.displayName) as \(ops)", category: "keyboard")
+        for op in ops {
+            switch op {
+            case .deleteBackward(let count):
+                for _ in 0..<count { textDocumentProxy.deleteBackward() }
+                lastInsertedText = nil
+            case .insertRaw(let text):
+                textDocumentProxy.insertText(text)
+                lastInsertedText = text
+            case .insertDictation(let text):
+                insert(text)
+            }
+        }
+    }
+
+    private func insertUnrecognizedAsText() {
+        guard let text = unrecognizedCommandText else { return }
+        unrecognizedCommandText = nil
+        insert(text)
+    }
+
+    private func dismissUnrecognized() {
+        unrecognizedCommandText = nil
+        refresh()
     }
 
     // MARK: - Flow session UI state
@@ -314,6 +373,7 @@ final class KeyboardViewController: UIInputViewController {
         suggestedCorrection = nil
         suggestionDismissed = false
         lastCheckedContext = nil
+        unrecognizedCommandText = nil
         DictationHandoff.clearPending()
         refresh()
     }

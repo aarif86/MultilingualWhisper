@@ -49,6 +49,12 @@ final class WhisperService {
 
     private(set) var loadedModels: Set<WhisperModelType> = []
 
+    /// Whether `model` can be used right now (downloaded), for UI that offers a
+    /// choice of models - e.g. History's "Re-run with…" menu.
+    func isModelAvailable(_ model: WhisperModelType) -> Bool {
+        modelStore.isDownloaded(model)
+    }
+
     private let modelStore: ModelStoring
     private let classifier: LanguageClassifying
     private let customDictionary: CustomDictionaryService

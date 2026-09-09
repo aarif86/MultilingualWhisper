@@ -38,6 +38,13 @@ below for what's still deliberately simplified.
   already transcribed the audio once.
 - **History & Settings** - transcriptions persist via SwiftData; app preferences via
   `UserDefaults`.
+- **Never lose a dictation** - the audio of the last 10 dictations is written to
+  disk (`UtteranceAudioStore`: Application Support, file-protected, excluded
+  from backup) *before* decoding starts, so a decode that fails still leaves a
+  retryable History entry, and any recent entry can be re-run with a different
+  model from its long-press menu. Off switch: Settings → "Keep recent
+  recordings". A Flow session also ends itself after 30 minutes without a
+  dictation, with the keyboard warning five minutes ahead.
 
 ## Keyboard extension
 

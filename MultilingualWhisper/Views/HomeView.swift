@@ -20,6 +20,7 @@ struct HomeView: View {
     // turned on for real), there's no reason to keep asking.
     @AppStorage("hasSeenKeyboardSetupNudge") private var hasSeenKeyboardSetupNudge = false
     let flowSession: FlowSessionEngine
+    private let whisperService: WhisperService
     // Stateless - see HistoryView's identical property for why this is
     // recomputed from saved text at display time instead of persisted.
     private let classifier = RuleBasedLanguageClassifier()
@@ -27,6 +28,34 @@ struct HomeView: View {
     init(audioService: AudioService, whisperService: WhisperService, flowSession: FlowSessionEngine) {
         _viewModel = State(initialValue: TranscriptionViewModel(audioService: audioService, whisperService: whisperService))
         self.flowSession = flowSession
+        self.whisperService = whisperService
+    }
+
+    /// Re-decodes a saved dictation's audio (UtteranceAudioStore) with the chosen
+    /// model, or with auto-routing when nil, and replaces the entry's text. The
+    /// "never lose a dictation" escape hatch: a failed decode, or a wrong-model
+    /// guess, is fixed from History instead of re-recording.
+    private func retry(_ transcription: Transcription, with model: WhisperModelType?) {
+        guard let fileName = transcription.audioFileName,
+              let samples = UtteranceAudioStore.load(named: fileName) else { return }
+        Task {
+            do {
+                let chunkSeconds = TimeInterval(AppSettings.shared.maxRecordDurationSeconds)
+                let result: WhisperService.TranscriptionResult
+                if let model {
+                    result = try await whisperService.transcribe(samples: samples, using: model, chunkDurationSeconds: chunkSeconds)
+                } else {
+                    result = try await whisperService.transcribeWithAutoRouting(samples: samples, chunkDurationSeconds: chunkSeconds)
+                }
+                guard !result.text.isEmpty else { return }
+                transcription.text = result.text
+                transcription.modelUsed = result.modelUsed
+                transcription.languageUsed = result.languageTag
+                try? modelContext.save()
+            } catch {
+                DebugLogger.shared.log("History retry failed: \(error)", category: "history")
+            }
+        }
     }
 
     /// Turning it on is async (mic permission + starting the continuous
@@ -362,8 +391,19 @@ struct HomeView: View {
 
     private func row(for transcription: Transcription) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(transcription.text)
-                .lineLimit(3)
+            if transcription.isFailedWithAudio {
+                Label(
+                    transcription.canRetry
+                        ? "Couldn't transcribe - audio kept. Hold to retry with another model."
+                        : "Couldn't transcribe, and the audio has since been cleared.",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            } else {
+                Text(transcription.text)
+                    .lineLimit(3)
+            }
 
             HStack(spacing: 6) {
                 Text(transcription.date, format: .dateTime.hour().minute())
@@ -387,7 +427,27 @@ struct HomeView: View {
             ShareLink(item: transcription.text) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
+            if transcription.canRetry {
+                Menu {
+                    Button {
+                        retry(transcription, with: nil)
+                    } label: {
+                        Label("Auto-detect", systemImage: "wand.and.stars")
+                    }
+                    ForEach(WhisperModelType.allCases, id: \.self) { model in
+                        Button {
+                            retry(transcription, with: model)
+                        } label: {
+                            Label(model.displayName, systemImage: model == transcription.modelUsed ? "checkmark" : "waveform")
+                        }
+                        .disabled(!whisperService.isModelAvailable(model))
+                    }
+                } label: {
+                    Label("Re-run with\u{2026}", systemImage: "arrow.clockwise")
+                }
+            }
             Button(role: .destructive) {
+                UtteranceAudioStore.delete(named: transcription.audioFileName)
                 historyViewModel.delete(transcription, context: modelContext)
             } label: {
                 Label("Delete", systemImage: "trash")

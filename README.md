@@ -101,6 +101,25 @@ app → General → Keyboard → Keyboards → Add New Keyboard → Nasar Flow**
 tap it again and turn on **Allow Full Access** (required - a keyboard needs it
 to be allowed to open another app at all).
 
+## Shortcuts, Siri, Action Button, Back Tap
+
+Three App Intents (`MultilingualWhisper/App/NasarFlowIntents.swift`) are
+registered with Shortcuts and Siri on install, so no setup inside the app is
+needed:
+
+| Intent | Say | Does |
+|---|---|---|
+| **Dictate** | "Dictate with Nasar Flow" | Opens the app on Quick Dictate and starts listening. Transcript goes to the clipboard and the keyboard's Insert row. |
+| **Turn On Flow** | "Turn on Flow in Nasar Flow" | Shows the Flow activation sheet (same as the keyboard's Start Flow). |
+| **Turn Off Flow** | "Turn off Flow in Nasar Flow" | Ends the Flow session and releases the mic. |
+
+To put dictation on a physical button: Settings → Action Button → Shortcut →
+pick "Dictate" under Nasar Flow (iPhone 15 Pro and later), or Settings →
+Accessibility → Touch → Back Tap → Double Tap → the same shortcut. Every intent
+opens the app because iOS only lets a foreground app start the microphone.
+Control Center controls and Lock Screen widgets need a widget extension (a
+second bundle ID and provisioning profile), so they are not included yet.
+
 ## Requirements
 
 - iOS 17.0+ (SwiftData and the `@Observable` macro both require it)

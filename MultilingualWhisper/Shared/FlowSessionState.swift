@@ -32,6 +32,8 @@ enum FlowSessionState {
     private static let isRecordingKey = "flow.isRecording"
     private static let startedAtKey = "flow.utteranceStartedAt"
     private static let lastFailureKey = "flow.lastFailureAt"
+    private static let idleDeadlineKey = "flow.idleDeadline"
+    private static let lastIdleTimeoutKey = "flow.lastIdleTimeoutAt"
 
     private static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: DictationHandoff.appGroupID)
@@ -69,6 +71,23 @@ enum FlowSessionState {
         set { sharedDefaults?.set(newValue, forKey: lastFailureKey) }
     }
 
+    /// When the app will end the session for inactivity (see
+    /// `FlowSessionEngine.checkIdle`). Pushed forward by every dictation. The
+    /// keyboard reads it to warn shortly before, so the mic never just
+    /// disappears without explanation.
+    static var idleDeadline: Date? {
+        get { sharedDefaults?.object(forKey: idleDeadlineKey) as? Date }
+        set { sharedDefaults?.set(newValue, forKey: idleDeadlineKey) }
+    }
+
+    /// Set when a session was ended by the idle timeout rather than the user,
+    /// so the keyboard can say why "Start Flow" is back. Deliberately not
+    /// cleared by `clear()`: it describes the session that just ended.
+    static var lastIdleTimeoutAt: Date? {
+        get { sharedDefaults?.object(forKey: lastIdleTimeoutKey) as? Date }
+        set { sharedDefaults?.set(newValue, forKey: lastIdleTimeoutKey) }
+    }
+
     /// Called when a session ends (explicitly, or the app decides to time it
     /// out) so the keyboard falls back to "Start" instead of a stale
     /// listening-capable state that no longer actually works.
@@ -77,5 +96,6 @@ enum FlowSessionState {
         isRecording = false
         utteranceStartedAt = nil
         lastFailureAt = nil
+        idleDeadline = nil
     }
 }

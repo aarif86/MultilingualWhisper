@@ -97,6 +97,12 @@ struct SettingsView: View {
                     Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
                 }
 
+                Section {
+                    Toggle("Keep recent recordings", isOn: $viewModel.keepRecentAudio)
+                } footer: {
+                    Text("Keeps the audio of your last \(Constants.maxRecentUtterances) dictations on this phone - protected and excluded from backups - so any of them can be re-run with a different model from History, and a failed dictation is never lost. Turn off to keep nothing.")
+                }
+
                 Section("Data Management") {
                     LabeledContent("Storage Used", value: viewModel.storageUsedDescription)
 

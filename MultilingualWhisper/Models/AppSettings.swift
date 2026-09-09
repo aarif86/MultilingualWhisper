@@ -55,6 +55,14 @@ final class AppSettings {
         didSet { defaults.set(saveDebugAudio, forKey: Keys.saveDebugAudio) }
     }
 
+    /// Keep the audio of the last few dictations (UtteranceAudioStore) so they can
+    /// be re-run with another model or retried after a failed decode. On by
+    /// default because a lost dictation is the failure users forgive least;
+    /// the files never leave the app sandbox and the toggle is one tap away.
+    var keepRecentAudio: Bool {
+        didSet { defaults.set(keepRecentAudio, forKey: Keys.keepRecentAudio) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -65,6 +73,7 @@ final class AppSettings {
         self.cleanupLevel = defaults.string(forKey: Keys.cleanupLevel).flatMap(CleanupLevel.init(rawValue:)) ?? .light
         self.maxRecordDurationSeconds = defaults.object(forKey: Keys.maxRecordDuration) as? Int ?? Int(Constants.chunkDurationSeconds)
         self.saveDebugAudio = defaults.object(forKey: Keys.saveDebugAudio) as? Bool ?? false
+        self.keepRecentAudio = defaults.object(forKey: Keys.keepRecentAudio) as? Bool ?? true
     }
 
     private enum Keys {
@@ -75,5 +84,6 @@ final class AppSettings {
         static let cleanupLevel = "settings.cleanupLevel"
         static let maxRecordDuration = "settings.maxRecordDuration"
         static let saveDebugAudio = "settings.saveDebugAudio"
+        static let keepRecentAudio = "settings.keepRecentAudio"
     }
 }

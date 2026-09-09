@@ -84,6 +84,14 @@ enum Constants {
     /// must resample to this rate.
     static let sampleRate: Double = 16_000
     static let chunkDurationSeconds: TimeInterval = 30
+
+    /// A Flow session keeps the microphone open; end it after this long with no
+    /// dictation so a forgotten session doesn't run the battery down overnight.
+    static let flowSessionIdleTimeout: TimeInterval = 30 * 60
+    /// Show "turning off soon" this long before the idle timeout.
+    static let flowSessionIdleWarning: TimeInterval = 5 * 60
+    /// How many recent dictations keep their audio for retry (UtteranceAudioStore).
+    static let maxRecentUtterances = 10
     static let defaultVADThreshold: Float = 0.7
 
     // MARK: - Language detection heuristics

@@ -42,6 +42,14 @@ final class SettingsViewModel {
         set { settings.maxRecordDurationSeconds = newValue }
     }
 
+    var keepRecentAudio: Bool {
+        get { settings.keepRecentAudio }
+        set {
+            settings.keepRecentAudio = newValue
+            if !newValue { UtteranceAudioStore.clear() }
+        }
+    }
+
     var saveDebugAudio: Bool {
         get { settings.saveDebugAudio }
         set { settings.saveDebugAudio = newValue }

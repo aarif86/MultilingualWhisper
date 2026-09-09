@@ -50,6 +50,9 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // This keyboard *is* a dictation key - tell iOS so it never tries to
+        // layer its own (mic-less, and therefore dead) dictation control on top.
+        hasDictationKey = true
         autoInsertPendingResult()
         setupHostedView()
         setupNextKeyboardButton()

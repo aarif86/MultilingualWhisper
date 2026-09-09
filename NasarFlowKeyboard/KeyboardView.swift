@@ -91,7 +91,9 @@ struct KeyboardView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Text("Turns on dictation for every app - open Nasar Flow once, then come back here")
+            Text(recentlyTimedOut
+                 ? "Flow turned itself off after a while without dictation - start it again when you need it"
+                 : "Turns on dictation for every app - open Nasar Flow once, then come back here")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -99,15 +101,41 @@ struct KeyboardView: View {
     }
 
     private var listenButton: some View {
-        Button {
-            onStartListening()
-        } label: {
-            Label("Tap to speak", systemImage: "mic.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+        VStack(spacing: 4) {
+            Button {
+                onStartListening()
+            } label: {
+                Label("Tap to speak", systemImage: "mic.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+
+            if let minutes = minutesUntilIdleTimeout {
+                Text("Flow turns off in \(minutes) min if unused - tap to speak keeps it on")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
-        .buttonStyle(.borderedProminent)
+    }
+
+    // MARK: - Idle timeout hints (read straight from the shared state; the
+    // controller re-creates this view on every tick, so they stay current)
+
+    /// Minutes left before the app ends the session for inactivity, only once
+    /// that is close enough to be worth saying (five minutes or less).
+    private var minutesUntilIdleTimeout: Int? {
+        guard let deadline = FlowSessionState.idleDeadline else { return nil }
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0, remaining <= 5 * 60 else { return nil }
+        return max(1, Int((remaining / 60).rounded(.up)))
+    }
+
+    private var recentlyTimedOut: Bool {
+        guard let at = FlowSessionState.lastIdleTimeoutAt else { return false }
+        return Date().timeIntervalSince(at) < 10 * 60
     }
 
     private func listeningButton(elapsed: TimeInterval) -> some View {

@@ -66,7 +66,11 @@ final class FlowSessionEngineTests: XCTestCase {
         DictationHandoff.clearPending()
     }
 
-    private func makeEngine(returning mock: MockWhisperEngine) -> FlowSessionEngine {
+    private func makeEngine(
+        returning mock: MockWhisperEngine,
+        keepRecentAudio: Bool = true,
+        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout
+    ) -> FlowSessionEngine {
         let whisperService = WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), cleanupLevel: { .raw }, makeEngine: { _ in mock })
         let schema = Schema([Transcription.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -78,7 +82,8 @@ final class FlowSessionEngineTests: XCTestCase {
         // takes the transcribeWithAutoRouting path every mock here assumes)
         // regardless of anything else running in this process.
         let isolatedSettings = AppSettings(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-\(UUID())")!)
-        return FlowSessionEngine(whisperService: whisperService, modelContainer: container, settings: isolatedSettings)
+        isolatedSettings.keepRecentAudio = keepRecentAudio
+        return FlowSessionEngine(whisperService: whisperService, modelContainer: container, settings: isolatedSettings, idleTimeout: idleTimeout)
     }
 
     // MARK: - Start signal
@@ -194,5 +199,108 @@ final class FlowSessionEngineTests: XCTestCase {
 
         XCTAssertFalse(engine.isActive)
         XCTAssertFalse(engine.isRecording, "end() should stop capturing immediately and synchronously, not wait on anything")
+    }
+
+    // MARK: - Never lose a dictation
+
+    func testSuccessfulUtteranceKeepsItsAudioOnTheHistoryEntry() async throws {
+        UtteranceAudioStore.clear()
+        defer { UtteranceAudioStore.clear() }
+        let engine = makeEngine(returning: MockWhisperEngine(text: "kept"))
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        let records = engine.test_historyRecords()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.text, "kept")
+        let audio = try XCTUnwrap(records.first?.audioFileName)
+        XCTAssertTrue(UtteranceAudioStore.exists(audio), "audio should be on disk before/after the decode")
+        XCTAssertEqual(UtteranceAudioStore.load(named: audio)?.count, 16_000)
+    }
+
+    func testFailedDecodeStillSavesARetryableHistoryEntry() async throws {
+        UtteranceAudioStore.clear()
+        defer { UtteranceAudioStore.clear() }
+        struct DecodeError: Error {}
+        let engine = makeEngine(returning: MockWhisperEngine(text: "unused", throwing: DecodeError()))
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        let records = engine.test_historyRecords()
+        XCTAssertEqual(records.count, 1, "the failure must leave something to retry")
+        XCTAssertTrue(records.first?.isFailedWithAudio ?? false)
+        XCTAssertTrue(records.first?.canRetry ?? false)
+        XCTAssertNotNil(FlowSessionState.lastFailureAt)
+    }
+
+    func testAudioIsNotKeptWhenTheSettingIsOff() async {
+        UtteranceAudioStore.clear()
+        defer { UtteranceAudioStore.clear() }
+        let engine = makeEngine(returning: MockWhisperEngine(text: "no audio"), keepRecentAudio: false)
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(engine.test_historyRecords().first?.text, "no audio")
+        XCTAssertNil(engine.test_historyRecords().first?.audioFileName)
+        XCTAssertTrue(UtteranceAudioStore.allFiles().isEmpty)
+    }
+
+    // MARK: - Idle timeout
+
+    func testUtteranceExtendsTheIdleDeadline() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "hi"), idleTimeout: 600)
+        engine.test_markActive()
+        FlowSessionState.idleDeadline = Date(timeIntervalSinceNow: 5)
+
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        let deadline = FlowSessionState.idleDeadline ?? .distantPast
+        XCTAssertGreaterThan(deadline.timeIntervalSinceNow, 500, "a dictation should push the deadline out by the full timeout")
+    }
+
+    func testCheckIdleEndsTheSessionPastTheDeadline() {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "unused"), idleTimeout: 600)
+        engine.test_markActive()
+        FlowSessionState.idleDeadline = Date(timeIntervalSinceNow: -1)
+
+        engine.checkIdle(now: Date())
+
+        XCTAssertFalse(engine.isActive)
+        XCTAssertFalse(FlowSessionState.isActive)
+        XCTAssertNotNil(FlowSessionState.lastIdleTimeoutAt)
+        XCTAssertNil(FlowSessionState.idleDeadline)
+    }
+
+    func testCheckIdleLeavesAnActiveDictationAlone() {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "unused"), idleTimeout: 600)
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        FlowSessionState.idleDeadline = Date(timeIntervalSinceNow: -1)
+
+        engine.checkIdle(now: Date())
+
+        XCTAssertTrue(engine.isActive, "never cut off someone mid-sentence")
+        XCTAssertTrue(engine.isRecording)
+    }
+
+    func testCheckIdleBeforeTheDeadlineDoesNothing() {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "unused"), idleTimeout: 600)
+        engine.test_markActive()
+        FlowSessionState.idleDeadline = Date(timeIntervalSinceNow: 300)
+
+        engine.checkIdle(now: Date())
+
+        XCTAssertTrue(engine.isActive)
     }
 }

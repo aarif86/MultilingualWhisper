@@ -12,13 +12,18 @@ final class Transcription {
     var modelUsed: WhisperModelType
     var isFavorite: Bool
     var notes: String?
+    /// File name in `UtteranceAudioStore`, when the audio was kept - lets this
+    /// entry be re-run with another model, or retried after a failed decode.
+    /// Optional so SwiftData migrates existing stores in place.
+    var audioFileName: String?
 
     init(
         text: String,
         duration: TimeInterval,
         languageUsed: LanguageType,
         modelUsed: WhisperModelType,
-        date: Date = Date()
+        date: Date = Date(),
+        audioFileName: String? = nil
     ) {
         self.id = UUID()
         self.text = text
@@ -28,9 +33,19 @@ final class Transcription {
         self.modelUsed = modelUsed
         self.isFavorite = false
         self.notes = nil
+        self.audioFileName = audioFileName
     }
 
     var wordCount: Int {
         text.split(whereSeparator: \.isWhitespace).count
+    }
+
+    /// A decode that failed but whose audio survived - shown as retryable.
+    var isFailedWithAudio: Bool {
+        text.isEmpty && audioFileName != nil
+    }
+
+    var canRetry: Bool {
+        UtteranceAudioStore.exists(audioFileName)
     }
 }

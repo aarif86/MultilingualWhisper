@@ -178,6 +178,8 @@ final class TranscriptionViewModel {
         liveUpdateTask = nil
         let samples = audioService.stopRecording()
         let duration = recordingElapsed
+        // Kept before decoding, so History can re-run it with another model.
+        let audioFileName = settings.keepRecentAudio && !samples.isEmpty ? UtteranceAudioStore.save(samples: samples) : nil
         // Distinguishes "audio capture produced nothing" from "whisper decoded
         // the captured audio to nothing" - otherwise identical from the outside.
         DebugLogger.shared.log("stopAndTranscribe: samples=\(samples.count) duration=\(duration)", category: "viewmodel")
@@ -210,7 +212,7 @@ final class TranscriptionViewModel {
                 lastDuration = duration
                 phase = .idle
 
-                saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration)
+                saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
             } catch {
                 DebugLogger.shared.log("stopAndTranscribe failed: \(error)", category: "viewmodel")
                 phase = .error(error.localizedDescription)
@@ -218,9 +220,9 @@ final class TranscriptionViewModel {
         }
     }
 
-    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval) {
+    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?) {
         guard !text.isEmpty, let context = activeModelContext else { return }
-        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model)
+        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName)
         context.insert(record)
         try? context.save()
     }

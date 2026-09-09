@@ -46,6 +46,9 @@ final class FlowSessionEngine {
     private var sampleContinuation: AsyncStream<[Float]>.Continuation?
     private var startObserver: DarwinNotification.Observer?
     private var stopObserver: DarwinNotification.Observer?
+    private var idleTimer: Timer?
+    /// See `checkIdle` - injectable so tests don't wait half an hour.
+    private let idleTimeout: TimeInterval
 
     // `nonisolated(unsafe)`: read-only after init, touched from `convert`
     // which deliberately runs off the main actor - see AudioService's
@@ -57,10 +60,16 @@ final class FlowSessionEngine {
         interleaved: false
     )!
 
-    init(whisperService: WhisperService, modelContainer: ModelContainer, settings: AppSettings = .shared) {
+    init(
+        whisperService: WhisperService,
+        modelContainer: ModelContainer,
+        settings: AppSettings = .shared,
+        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout
+    ) {
         self.whisperService = whisperService
         self.modelContext = ModelContext(modelContainer)
         self.settings = settings
+        self.idleTimeout = idleTimeout
 
         // Registered immediately at app launch (this is created as app-level
         // @State), not lazily on activation - so a signal arriving is never
@@ -114,6 +123,8 @@ final class FlowSessionEngine {
         isActive = true
         lastError = nil
         FlowSessionState.isActive = true
+        touchIdleDeadline()
+        armIdleTimer()
         DebugLogger.shared.log("FlowSession activated - engine running continuously", category: "flow")
         // Start capturing the very first utterance immediately, rather than
         // waiting for a separate keyboard tap on top of Start Flow + swiping
@@ -141,11 +152,41 @@ final class FlowSessionEngine {
         isCapturingUtterance = false
         isRecording = false
         samples.removeAll(keepingCapacity: true)
+        idleTimer?.invalidate()
+        idleTimer = nil
         stopEngine()
         isActive = false
         FlowSessionState.clear()
         DarwinNotification.post(FlowSessionState.stateChanged)
         DebugLogger.shared.log("FlowSession ended", category: "flow")
+    }
+
+    // MARK: - Idle timeout
+
+    /// The microphone stays open for the whole session, so a session nobody is
+    /// using is pure battery drain (and the keyboard's own reviews for the
+    /// category say users notice). Every dictation pushes the deadline out by
+    /// `idleTimeout`; a timer checks it, and the keyboard reads the same deadline
+    /// to warn shortly before - see `FlowSessionState.idleDeadline`.
+    private func touchIdleDeadline(now: Date = Date()) {
+        FlowSessionState.idleDeadline = now.addingTimeInterval(idleTimeout)
+    }
+
+    private func armIdleTimer() {
+        idleTimer?.invalidate()
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkIdle() }
+        }
+    }
+
+    /// Ends the session once the deadline has passed - but never mid-dictation.
+    func checkIdle(now: Date = Date()) {
+        guard isActive, !isCapturingUtterance,
+              let deadline = FlowSessionState.idleDeadline, now >= deadline else { return }
+        DebugLogger.shared.log("FlowSession idle for \(Int(idleTimeout))s - ending", category: "flow")
+        end()
+        FlowSessionState.lastIdleTimeoutAt = now
+        DarwinNotification.post(FlowSessionState.stateChanged)
     }
 
     // MARK: - Darwin notification handlers (keyboard -> app)
@@ -183,6 +224,7 @@ final class FlowSessionEngine {
         samples.removeAll(keepingCapacity: true)
         FlowSessionState.isRecording = false
         FlowSessionState.utteranceStartedAt = nil
+        touchIdleDeadline()
         DarwinNotification.post(FlowSessionState.stateChanged)
         guard publish else { return }
         guard !captured.isEmpty else {
@@ -194,7 +236,10 @@ final class FlowSessionEngine {
             signalFailure()
             return
         }
-        await transcribeAndPublish(captured, duration: duration)
+        // On disk *before* decoding: whatever the decode does next, the words
+        // are safe and History can re-run them (UtteranceAudioStore).
+        let audioFileName = settings.keepRecentAudio ? UtteranceAudioStore.save(samples: captured) : nil
+        await transcribeAndPublish(captured, duration: duration, audioFileName: audioFileName)
     }
 
     private func signalFailure() {
@@ -202,7 +247,7 @@ final class FlowSessionEngine {
         DarwinNotification.post(FlowSessionState.stateChanged)
     }
 
-    private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval) async {
+    private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval, audioFileName: String?) async {
         do {
             let result: WhisperService.TranscriptionResult
             let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)
@@ -213,22 +258,40 @@ final class FlowSessionEngine {
             }
             guard !result.text.isEmpty else {
                 DebugLogger.shared.log("FlowSession utterance transcribed empty", category: "flow")
+                saveFailedToHistory(duration: duration, audioFileName: audioFileName)
                 signalFailure()
                 return
             }
             DictationHandoff.publish(result.text)
             UIPasteboard.general.string = result.text
-            saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration)
+            saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
             DarwinNotification.post(FlowSessionState.stateChanged)
             DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
         } catch {
             DebugLogger.shared.log("FlowSession transcription failed: \(error)", category: "flow")
+            saveFailedToHistory(duration: duration, audioFileName: audioFileName)
             signalFailure()
         }
     }
 
-    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval) {
-        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model)
+    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?) {
+        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName)
+        modelContext.insert(record)
+        try? modelContext.save()
+    }
+
+    /// A decode that produced nothing still gets a History entry when its audio
+    /// was kept, so the user can re-run it instead of re-recording. Without
+    /// audio there is nothing to retry, so nothing is saved.
+    private func saveFailedToHistory(duration: TimeInterval, audioFileName: String?) {
+        guard let audioFileName else { return }
+        let record = Transcription(
+            text: "",
+            duration: duration,
+            languageUsed: .unknown,
+            modelUsed: settings.languageMode.pinnedModel ?? .singlish,
+            audioFileName: audioFileName
+        )
         modelContext.insert(record)
         try? modelContext.save()
     }
@@ -353,6 +416,12 @@ extension FlowSessionEngine {
     func test_handleStopSignalAndWait() async {
         guard isCapturingUtterance else { return }
         await finishUtterance(publish: true)
+    }
+
+    /// Everything this engine has saved to History, oldest first.
+    func test_historyRecords() -> [Transcription] {
+        let descriptor = FetchDescriptor<Transcription>(sortBy: [SortDescriptor(\.date)])
+        return (try? modelContext.fetch(descriptor)) ?? []
     }
 }
 #endif

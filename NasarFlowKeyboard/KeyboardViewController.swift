@@ -34,6 +34,12 @@ final class KeyboardViewController: UIInputViewController {
     // long, never a wrong deletion, since undo always deletes exactly this
     // many characters regardless of what's shown.
     private var lastInsertedText: String?
+    /// A hand-made correction spotted in the host field since the last insert -
+    /// see CorrectionLearner. Offered once; cleared by the next insert.
+    private var suggestedCorrection: CorrectionLearner.Correction?
+    private var suggestionDismissed = false
+    private var lastCheckedContext: String?
+    private let learnedStore = LearnedCorrectionsStore.shared
     private var flowPhase: FlowPhase = .idle
     private var tickTimer: Timer?
     private var phaseTimeoutTimer: Timer?
@@ -73,6 +79,36 @@ final class KeyboardViewController: UIInputViewController {
         // Called on selection/context changes too - a reasonable proxy for
         // "the keyboard is visible again", e.g. after switching back from the
         // main app, so the pending-insert row shows up without extra plumbing.
+        detectCorrection()
+        refresh()
+    }
+
+    // MARK: - Learning corrections
+
+    /// Compares what was last inserted with what the field holds now. The user
+    /// typically corrects with another keyboard, and iOS may re-create this
+    /// extension in between, so the last insert is read back from the App Group
+    /// when this instance never saw it.
+    private func detectCorrection() {
+        guard !suggestionDismissed else { return }
+        guard let inserted = lastInsertedText ?? learnedStore.recentInsert(),
+              let context = textDocumentProxy.documentContextBeforeInput,
+              context != lastCheckedContext else { return }
+        lastCheckedContext = context
+        suggestedCorrection = CorrectionLearner.corrections(inserted: inserted, context: context).first
+    }
+
+    private func learnSuggestedCorrection() {
+        guard let correction = suggestedCorrection else { return }
+        learnedStore.enqueue(correction)
+        suggestedCorrection = nil
+        suggestionDismissed = true
+        refresh()
+    }
+
+    private func dismissSuggestedCorrection() {
+        suggestedCorrection = nil
+        suggestionDismissed = true
         refresh()
     }
 
@@ -120,10 +156,13 @@ final class KeyboardViewController: UIInputViewController {
         KeyboardView(
             hasFullAccess: hasFullAccess,
             lastInsertedText: lastInsertedText,
+            suggestedCorrection: suggestedCorrection,
             flowState: currentFlowUIState(),
             onStartListening: { [weak self] in self?.startListening() },
             onStopListening: { [weak self] in self?.stopListening() },
-            onUndoInsert: { [weak self] in self?.undoLastInsert() }
+            onUndoInsert: { [weak self] in self?.undoLastInsert() },
+            onLearnCorrection: { [weak self] in self?.learnSuggestedCorrection() },
+            onDismissCorrection: { [weak self] in self?.dismissSuggestedCorrection() }
         )
     }
 
@@ -259,8 +298,22 @@ final class KeyboardViewController: UIInputViewController {
     // dictation. Staying put plus a one-tap undo (below) covers "that's not
     // what I said" without penalizing dictating several messages in a row.
     private func insert(_ text: String) {
-        textDocumentProxy.insertText(text)
-        lastInsertedText = text
+        // Spacing and capitalisation relative to the cursor - see InsertionPolicy.
+        // The undo below removes exactly plan.text, spaces included.
+        let plan = InsertionPolicy.plan(
+            inserting: text,
+            before: textDocumentProxy.documentContextBeforeInput,
+            after: textDocumentProxy.documentContextAfterInput,
+            selected: textDocumentProxy.selectedText
+        )
+        if !plan.text.isEmpty {
+            textDocumentProxy.insertText(plan.text)
+            lastInsertedText = plan.text
+            learnedStore.rememberInsert(plan.text)
+        }
+        suggestedCorrection = nil
+        suggestionDismissed = false
+        lastCheckedContext = nil
         DictationHandoff.clearPending()
         refresh()
     }
@@ -273,6 +326,9 @@ final class KeyboardViewController: UIInputViewController {
         guard let text = lastInsertedText else { return }
         text.forEach { _ in textDocumentProxy.deleteBackward() }
         lastInsertedText = nil
+        learnedStore.forgetInsert()
+        suggestedCorrection = nil
+        suggestionDismissed = true
         refresh()
     }
 }

@@ -21,10 +21,15 @@ struct KeyboardView: View {
 
     let hasFullAccess: Bool
     let lastInsertedText: String?
+    /// A spelling fix the user made by hand to the last insert, offered for the
+    /// Custom Dictionary - see CorrectionLearner.
+    let suggestedCorrection: CorrectionLearner.Correction?
     let flowState: FlowUIState
     let onStartListening: () -> Void
     let onStopListening: () -> Void
     let onUndoInsert: () -> Void
+    let onLearnCorrection: () -> Void
+    let onDismissCorrection: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
@@ -35,7 +40,9 @@ struct KeyboardView: View {
                 // (see KeyboardViewController.autoInsertPendingResult) - this
                 // row is the confirmation of what just got typed, and the
                 // one-tap fix if it heard you wrong.
-                if let lastInsertedText {
+                if let suggestedCorrection {
+                    learnRow(suggestedCorrection)
+                } else if let lastInsertedText {
                     undoInsertRow(lastInsertedText)
                 }
                 flowControl
@@ -169,6 +176,39 @@ struct KeyboardView: View {
         .tint(.orange)
     }
 
+    /// Wispr Flow's "Add to Dictionary" pill, triggered by what the user actually
+    /// fixed rather than by a settings screen. One tap teaches the app; the
+    /// dictionary applies it to every future dictation.
+    private func learnRow(_ correction: CorrectionLearner.Correction) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "text.book.closed")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Teach Nasar Flow this spelling?")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\(correction.heard) → \(correction.corrected)")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            Spacer(minLength: 0)
+            Button("Add") { onLearnCorrection() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button {
+                onDismissCorrection()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Not now")
+        }
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
     private func undoInsertRow(_ text: String) -> some View {
         Button(role: .destructive) {
             onUndoInsert()
@@ -209,10 +249,13 @@ struct KeyboardView: View {
     KeyboardView(
         hasFullAccess: true,
         lastInsertedText: nil,
+        suggestedCorrection: nil,
         flowState: .inactive,
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
+        onLearnCorrection: {},
+        onDismissCorrection: {}
     )
     .frame(height: 216)
 }
@@ -221,10 +264,13 @@ struct KeyboardView: View {
     KeyboardView(
         hasFullAccess: true,
         lastInsertedText: nil,
+        suggestedCorrection: nil,
         flowState: .listening(elapsed: 4),
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
+        onLearnCorrection: {},
+        onDismissCorrection: {}
     )
     .frame(height: 216)
 }
@@ -233,10 +279,13 @@ struct KeyboardView: View {
     KeyboardView(
         hasFullAccess: true,
         lastInsertedText: "Bismillah, let's go makan lah",
+        suggestedCorrection: nil,
         flowState: .readyToListen,
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
+        onLearnCorrection: {},
+        onDismissCorrection: {}
     )
     .frame(height: 216)
 }

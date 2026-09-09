@@ -71,7 +71,7 @@ final class FlowSessionEngineTests: XCTestCase {
         keepRecentAudio: Bool = true,
         idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout
     ) -> FlowSessionEngine {
-        let whisperService = WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), makeEngine: { _ in mock })
+        let whisperService = WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), cleanupLevel: { .raw }, makeEngine: { _ in mock })
         let schema = Schema([Transcription.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: schema, configurations: [configuration])

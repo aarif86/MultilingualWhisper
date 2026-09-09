@@ -76,6 +76,15 @@ struct SettingsView: View {
 
                     Toggle("Auto-punctuation", isOn: $viewModel.autoPunctuation)
 
+                    Picker("Cleanup", selection: $viewModel.cleanupLevel) {
+                        ForEach(CleanupLevel.allCases) { level in
+                            Text(level.rawValue).tag(level)
+                        }
+                    }
+                    Text(viewModel.cleanupLevel.detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     Stepper(
                         "Chunk length: \(viewModel.maxRecordDurationSeconds)s",
                         value: $viewModel.maxRecordDurationSeconds,

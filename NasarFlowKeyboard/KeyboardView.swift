@@ -225,7 +225,7 @@ struct KeyboardView: View {
         flowState: .inactive,
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
         onLearnCorrection: {},
         onDismissCorrection: {}
     )
@@ -240,7 +240,7 @@ struct KeyboardView: View {
         flowState: .listening(elapsed: 4),
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
         onLearnCorrection: {},
         onDismissCorrection: {}
     )
@@ -255,7 +255,7 @@ struct KeyboardView: View {
         flowState: .readyToListen,
         onStartListening: {},
         onStopListening: {},
-        onUndoInsert: {}
+        onUndoInsert: {},
         onLearnCorrection: {},
         onDismissCorrection: {}
     )

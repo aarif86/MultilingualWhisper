@@ -23,7 +23,9 @@ struct MultilingualWhisperApp: App {
         // live transcription instead of a second, disconnected instance. Same
         // reasoning for flowSession depending on whisperService.
         let downloadService = ModelDownloadService()
-        let dictionaryService = CustomDictionaryService()
+        // learnedStore: the keyboard queues spelling corrections it noticed (see
+        // CorrectionLearner); the service pulls them in here and on foreground.
+        let dictionaryService = CustomDictionaryService(learnedStore: .shared)
         let whisper = WhisperService(modelStore: downloadService, customDictionary: dictionaryService)
         _modelDownloadService = State(initialValue: downloadService)
         _customDictionaryService = State(initialValue: dictionaryService)

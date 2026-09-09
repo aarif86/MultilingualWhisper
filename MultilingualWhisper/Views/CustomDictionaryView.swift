@@ -173,8 +173,18 @@ private struct DictionaryEntryRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.replacement)
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text(entry.replacement)
+                        .font(.headline)
+                    if entry.source == .learned {
+                        Text("Learned")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.15), in: Capsule())
+                            .accessibilityLabel("Learned from a correction you made")
+                    }
+                }
                 Text("Heard as: " + entry.spokenForms.joined(separator: ", "))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// User-editable find/replace corrections applied to every transcript after decoding.
 ///
@@ -36,11 +37,41 @@ final class CustomDictionaryService {
     private var matcher: DictionaryMatcher
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    /// Where the keyboard leaves corrections it noticed (see `CorrectionLearner`).
+    /// nil - the default, and what tests use - means "don't drain anything".
+    private let learnedStore: LearnedCorrectionsStore?
+    private var foregroundObserver: NSObjectProtocol?
+
+    init(defaults: UserDefaults = .standard, learnedStore: LearnedCorrectionsStore? = nil) {
         self.defaults = defaults
+        self.learnedStore = learnedStore
         let loaded = Self.load(from: defaults)
         entries = loaded
         matcher = DictionaryMatcher(entries: loaded)
+        guard learnedStore != nil else { return }
+        drainLearnedCorrections()
+        // The keyboard can only queue corrections while the app is in the
+        // background, so the moment the user comes back is exactly when to apply
+        // them - before they dictate again.
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.drainLearnedCorrections() }
+        }
+    }
+
+    /// Moves everything the keyboard learned into the dictionary as `.learned`
+    /// entries, merging into existing written forms. Returns how many were queued.
+    @discardableResult
+    func drainLearnedCorrections() -> Int {
+        guard let learnedStore else { return 0 }
+        let learned = learnedStore.drain()
+        for correction in learned {
+            add(DictionaryEntry(replacement: correction.corrected, spokenForms: [correction.heard], source: .learned))
+        }
+        return learned.count
     }
 
     // MARK: - Editing

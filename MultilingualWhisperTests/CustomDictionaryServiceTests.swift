@@ -273,4 +273,29 @@ final class CustomDictionaryServiceTests: XCTestCase {
         XCTAssertEqual(target.apply(to: "nasser so la"), "Nasar so lah")
         XCTAssertEqual(target.apply(to: "nasser so La"), "Nasar so La", "match case survived the round trip")
     }
+
+    // MARK: - Learned corrections
+
+    func testLearnedCorrectionsAreDrainedIntoTheDictionary() {
+        let storeSuite = "CustomDictionaryServiceTests.learned.\(UUID().uuidString)"
+        let storeDefaults = UserDefaults(suiteName: storeSuite)!
+        defer { storeDefaults.removePersistentDomain(forName: storeSuite) }
+        let store = LearnedCorrectionsStore(defaults: storeDefaults)
+        store.enqueue(.init(heard: "Nassar", corrected: "Nasar"))
+
+        let service = CustomDictionaryService(defaults: defaults, learnedStore: store)
+        XCTAssertEqual(service.entries.map(\.replacement), ["Nasar"])
+        XCTAssertEqual(service.entries.first?.source, .learned)
+        XCTAssertTrue(store.queued().isEmpty, "drained at init")
+        XCTAssertEqual(service.apply(to: "nassar"), "Nasar")
+
+        store.enqueue(.init(heard: "Nasser", corrected: "Nasar"))
+        XCTAssertEqual(service.drainLearnedCorrections(), 1)
+        XCTAssertEqual(service.entries.first?.spokenForms, ["Nassar", "Nasser"], "merged into the existing written form")
+    }
+
+    func testServiceWithoutAStoreNeverDrains() {
+        let service = CustomDictionaryService(defaults: defaults)
+        XCTAssertEqual(service.drainLearnedCorrections(), 0)
+    }
 }

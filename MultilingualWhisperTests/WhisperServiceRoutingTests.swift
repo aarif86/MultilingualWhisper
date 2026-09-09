@@ -145,9 +145,14 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let received = await mock.receivedOptions
         let precheckCalls = await mock.arabicLanguageProbabilityCallCount
         XCTAssertEqual(precheckCalls, 1)
-        // A confident pre-check should skip straight to Arabic - one transcribe
-        // call, using Arabic's own hint, not the usual Singlish-first draft pass.
-        XCTAssertEqual(received.count, 1)
+        // A confident pre-check should skip straight to Arabic - the draft
+        // pass uses Arabic's own hint, not the usual Singlish-first pass.
+        // A second call follows: the draft segment is exactly 1.0s (the
+        // per-segment reprocessing threshold), so it still gets language-ID
+        // probed like any other segment - this mock has no detectedLanguage
+        // configured, so the probe finds nothing to reroute and the draft
+        // text stands unchanged.
+        XCTAssertEqual(received.count, 2)
         XCTAssertEqual(received.first?.languageHint, WhisperModelType.arabic.languageHint)
         XCTAssertEqual(result.modelUsed, .arabic)
     }
@@ -163,7 +168,10 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let received = await mock.receivedOptions
         let precheckCalls = await mock.arabicLanguageProbabilityCallCount
         XCTAssertEqual(precheckCalls, 1)
-        XCTAssertEqual(received.count, 1)
+        // Second call is per-segment reprocessing's language-ID probe on the
+        // one (1.0s) draft segment - same reasoning as the confident-Arabic
+        // case above.
+        XCTAssertEqual(received.count, 2)
         XCTAssertEqual(received.first?.languageHint, WhisperModelType.singlish.languageHint)
         XCTAssertEqual(result.modelUsed, .singlish)
     }

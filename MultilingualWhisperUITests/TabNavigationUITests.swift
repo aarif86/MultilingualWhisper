@@ -5,12 +5,12 @@ final class TabNavigationUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testSwitchingToHistoryTabShowsHistoryScreen() throws {
+    func testSwitchingToDictionaryTabShowsDictionaryScreen() throws {
         let app = XCUIApplication()
         app.launch()
 
-        app.tabBars.buttons["History"].tap()
-        XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Dictionary"].tap()
+        XCTAssertTrue(app.navigationBars["Custom Dictionary"].waitForExistence(timeout: 5))
     }
 
     func testSwitchingToSettingsTabShowsSettingsScreen() throws {
@@ -22,14 +22,14 @@ final class TabNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Set Up Keyboard"].exists)
     }
 
-    func testCanNavigateBackToTranscribeTabFromSettings() throws {
+    func testCanNavigateBackToHomeTabFromSettings() throws {
         let app = XCUIApplication()
         app.launch()
 
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
 
-        app.tabBars.buttons["Transcribe"].tap()
+        app.tabBars.buttons["Home"].tap()
         XCTAssertTrue(app.buttons["Start recording"].waitForExistence(timeout: 5))
     }
 }

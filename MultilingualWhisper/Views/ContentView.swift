@@ -11,13 +11,15 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            TranscriptionView(audioService: audioService, whisperService: whisperService)
-                .tabItem { Label("Transcribe", systemImage: "waveform") }
+            HomeView(audioService: audioService, whisperService: whisperService, flowSession: flowSession)
+                .tabItem { Label("Home", systemImage: "house") }
 
-            HistoryView()
-                .tabItem { Label("History", systemImage: "clock") }
+            NavigationStack {
+                CustomDictionaryView(dictionaryService: customDictionaryService)
+            }
+            .tabItem { Label("Dictionary", systemImage: "textformat.abc") }
 
-            SettingsView(modelDownloadService: modelDownloadService, flowSession: flowSession, customDictionaryService: customDictionaryService)
+            SettingsView(modelDownloadService: modelDownloadService)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .fullScreenCover(isPresented: $quickDictateActive) {

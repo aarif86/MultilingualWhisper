@@ -20,12 +20,10 @@ struct KeyboardView: View {
     }
 
     let hasFullAccess: Bool
-    let pending: (text: String, date: Date)?
     let lastInsertedText: String?
     let flowState: FlowUIState
     let onStartListening: () -> Void
     let onStopListening: () -> Void
-    let onInsert: (String) -> Void
     let onUndoInsert: () -> Void
 
     var body: some View {
@@ -33,12 +31,11 @@ struct KeyboardView: View {
             if !hasFullAccess {
                 fullAccessNeeded
             } else {
-                if let pending {
-                    pendingResultRow(pending.text)
-                } else if let lastInsertedText {
-                    // Only shown once there's no new pending result waiting -
-                    // a fresh dictation always takes priority over undoing
-                    // the previous one.
+                // A finished dictation is inserted the instant it's ready
+                // (see KeyboardViewController.autoInsertPendingResult) - this
+                // row is the confirmation of what just got typed, and the
+                // one-tap fix if it heard you wrong.
+                if let lastInsertedText {
                     undoInsertRow(lastInsertedText)
                 }
                 flowControl
@@ -110,7 +107,11 @@ struct KeyboardView: View {
         Button {
             onStopListening()
         } label: {
-            Label("Listening\u{2026} \(Int(elapsed))s - tap to stop", systemImage: "waveform")
+            // "stop.fill" - the same icon RecordButton already uses for its
+            // own in-progress-recording state, not "waveform" (which reads as
+            // a passive "it's on" indicator rather than a control you can
+            // tap to stop).
+            Label("Listening\u{2026} \(Int(elapsed))s - tap to stop", systemImage: "stop.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -138,26 +139,6 @@ struct KeyboardView: View {
         }
         .buttonStyle(.bordered)
         .tint(.orange)
-    }
-
-    private func pendingResultRow(_ text: String) -> some View {
-        Button {
-            onInsert(text)
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Tap to insert")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(text)
-                    .font(.subheadline)
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
     }
 
     private func undoInsertRow(_ text: String) -> some View {
@@ -199,12 +180,10 @@ struct KeyboardView: View {
 #Preview("Inactive") {
     KeyboardView(
         hasFullAccess: true,
-        pending: nil,
         lastInsertedText: nil,
         flowState: .inactive,
         onStartListening: {},
         onStopListening: {},
-        onInsert: { _ in },
         onUndoInsert: {}
     )
     .frame(height: 216)
@@ -213,26 +192,10 @@ struct KeyboardView: View {
 #Preview("Listening") {
     KeyboardView(
         hasFullAccess: true,
-        pending: nil,
         lastInsertedText: nil,
         flowState: .listening(elapsed: 4),
         onStartListening: {},
         onStopListening: {},
-        onInsert: { _ in },
-        onUndoInsert: {}
-    )
-    .frame(height: 216)
-}
-
-#Preview("Pending result") {
-    KeyboardView(
-        hasFullAccess: true,
-        pending: (text: "Bismillah, let's go makan lah", date: Date()),
-        lastInsertedText: nil,
-        flowState: .readyToListen,
-        onStartListening: {},
-        onStopListening: {},
-        onInsert: { _ in },
         onUndoInsert: {}
     )
     .frame(height: 216)
@@ -241,12 +204,10 @@ struct KeyboardView: View {
 #Preview("After insert") {
     KeyboardView(
         hasFullAccess: true,
-        pending: nil,
         lastInsertedText: "Bismillah, let's go makan lah",
         flowState: .readyToListen,
         onStartListening: {},
         onStopListening: {},
-        onInsert: { _ in },
         onUndoInsert: {}
     )
     .frame(height: 216)

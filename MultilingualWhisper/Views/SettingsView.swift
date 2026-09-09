@@ -5,14 +5,12 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transcriptions: [Transcription]
     @State private var viewModel: SettingsViewModel
-    let customDictionaryService: CustomDictionaryService
-    let flowSession: FlowSessionEngine
     @State private var showClearAllConfirmation = false
     @State private var showKeyboardSetup = false
     // Toggled after clearing the debug log/audio, and on every appearance of
     // this screen, to force hasDebugLog/latestDebugAudioURL to re-evaluate -
-    // SwiftUI has no other reason to know a file written from the Transcribe
-    // tab (a different screen entirely) has appeared on disk.
+    // SwiftUI has no other reason to know a file written from the Home tab
+    // (a different screen entirely) has appeared on disk.
     @State private var debugRefreshTrigger = false
 
     private var hasDebugLog: Bool {
@@ -25,28 +23,8 @@ struct SettingsView: View {
         return DebugAudioStore.latestFile()
     }
 
-    init(modelDownloadService: ModelDownloadService, flowSession: FlowSessionEngine, customDictionaryService: CustomDictionaryService) {
+    init(modelDownloadService: ModelDownloadService) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
-        self.flowSession = flowSession
-        self.customDictionaryService = customDictionaryService
-    }
-
-    /// Turning it on is async (mic permission + starting the continuous
-    /// engine - see FlowSessionEngine.activate()), but Toggle needs a plain
-    /// Binding<Bool> - fire the async work and let flowSession.isActive
-    /// (an @Observable property) drive the toggle's actual displayed state
-    /// once it resolves, rather than assuming success immediately.
-    private var flowToggleBinding: Binding<Bool> {
-        Binding(
-            get: { flowSession.isActive },
-            set: { newValue in
-                if newValue {
-                    Task { await flowSession.activate() }
-                } else {
-                    flowSession.end()
-                }
-            }
-        )
     }
 
     var body: some View {
@@ -68,25 +46,6 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
-                }
-
-                Section {
-                    Toggle("Flow", isOn: flowToggleBinding)
-
-                    if flowSession.isRecording {
-                        Label("Listening\u{2026}", systemImage: "waveform")
-                            .foregroundStyle(.green)
-                    }
-
-                    if let error = flowSession.lastError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                } header: {
-                    Text("Flow")
-                } footer: {
-                    Text("When on, dictate straight from the Nasar Flow keyboard in any app - no need to open Nasar Flow for each dictation. This keeps the microphone engine running in the background while it's on, so turn it off when you're done to save battery.")
                 }
 
                 Section {
@@ -127,16 +86,6 @@ struct SettingsView: View {
                     Text("Recording Settings")
                 } footer: {
                     Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
-                }
-
-                Section {
-                    NavigationLink {
-                        CustomDictionaryView(dictionaryService: customDictionaryService)
-                    } label: {
-                        Label("Custom Dictionary", systemImage: "textformat.abc")
-                    }
-                } footer: {
-                    Text("Teach the app words it keeps getting wrong - a name, a product, local slang. Applied after transcription, on every model.")
                 }
 
                 Section("Data Management") {

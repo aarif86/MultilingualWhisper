@@ -256,8 +256,18 @@ final class KeyboardViewController: UIInputViewController {
     // dictation. Staying put plus a one-tap undo (below) covers "that's not
     // what I said" without penalizing dictating several messages in a row.
     private func insert(_ text: String) {
-        textDocumentProxy.insertText(text)
-        lastInsertedText = text
+        // Spacing and capitalisation relative to the cursor - see InsertionPolicy.
+        // The undo below removes exactly plan.text, spaces included.
+        let plan = InsertionPolicy.plan(
+            inserting: text,
+            before: textDocumentProxy.documentContextBeforeInput,
+            after: textDocumentProxy.documentContextAfterInput,
+            selected: textDocumentProxy.selectedText
+        )
+        if !plan.text.isEmpty {
+            textDocumentProxy.insertText(plan.text)
+            lastInsertedText = plan.text
+        }
         DictationHandoff.clearPending()
         refresh()
     }

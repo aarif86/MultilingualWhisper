@@ -34,6 +34,13 @@ final class AppSettings {
         didSet { defaults.set(autoPunctuation, forKey: Keys.autoPunctuation) }
     }
 
+    /// How much `TranscriptFormatter` tidies the final text. Light by default:
+    /// fillers, spacing and capitals are safe on every language the app targets;
+    /// Full adds number/price/time rewriting and is opt-in.
+    var cleanupLevel: CleanupLevel {
+        didSet { defaults.set(cleanupLevel.rawValue, forKey: Keys.cleanupLevel) }
+    }
+
     var maxRecordDurationSeconds: Int {
         didSet { defaults.set(maxRecordDurationSeconds, forKey: Keys.maxRecordDuration) }
     }
@@ -55,6 +62,7 @@ final class AppSettings {
         self.vadSensitivity = defaults.object(forKey: Keys.vadSensitivity) as? Float ?? Constants.defaultVADThreshold
         self.autoStopOnSilence = defaults.object(forKey: Keys.autoStopOnSilence) as? Bool ?? true
         self.autoPunctuation = defaults.object(forKey: Keys.autoPunctuation) as? Bool ?? true
+        self.cleanupLevel = defaults.string(forKey: Keys.cleanupLevel).flatMap(CleanupLevel.init(rawValue:)) ?? .light
         self.maxRecordDurationSeconds = defaults.object(forKey: Keys.maxRecordDuration) as? Int ?? Int(Constants.chunkDurationSeconds)
         self.saveDebugAudio = defaults.object(forKey: Keys.saveDebugAudio) as? Bool ?? false
     }
@@ -64,6 +72,7 @@ final class AppSettings {
         static let vadSensitivity = "settings.vadSensitivity"
         static let autoStopOnSilence = "settings.autoStopOnSilence"
         static let autoPunctuation = "settings.autoPunctuation"
+        static let cleanupLevel = "settings.cleanupLevel"
         static let maxRecordDuration = "settings.maxRecordDuration"
         static let saveDebugAudio = "settings.saveDebugAudio"
     }

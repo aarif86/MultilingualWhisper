@@ -70,13 +70,19 @@ final class WhisperService {
         modelStore: ModelStoring,
         classifier: LanguageClassifying = RuleBasedLanguageClassifier(),
         customDictionary: CustomDictionaryService,
+        cleanupLevel: @escaping () -> CleanupLevel = { AppSettings.shared.cleanupLevel },
         makeEngine: @escaping @Sendable (String) throws -> WhisperTranscribing = { try WhisperEngine(modelPath: $0) }
     ) {
         self.modelStore = modelStore
         self.classifier = classifier
         self.customDictionary = customDictionary
+        self.cleanupLevel = cleanupLevel
         self.makeEngine = makeEngine
     }
+
+    /// Read at each decode so a Settings change applies to the very next utterance.
+    /// Tests pass `{ .raw }` so their exact-string expectations stay byte-for-byte.
+    private let cleanupLevel: () -> CleanupLevel
 
     /// Loads (or returns the already-loaded) engine for a model type. Safe to
     /// call repeatedly / concurrently - concurrent callers await the same
@@ -468,6 +474,10 @@ final class WhisperService {
             .map { TranscriptSanitizer.stripAnnotationTags($0.text) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        return customDictionary.apply(to: text)
+        // Dictionary first (it fixes *words*), then the formatter (it fixes *text*) -
+        // so a correction like "m r t" -> "MRT" is in place before capitalisation
+        // and number rules look at the line.
+        let corrected = customDictionary.apply(to: text)
+        return TranscriptFormatter.format(corrected, level: cleanupLevel())
     }
 }

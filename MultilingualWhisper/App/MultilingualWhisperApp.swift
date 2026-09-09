@@ -13,6 +13,7 @@ struct MultilingualWhisperApp: App {
     @State private var quickDictateActive = false
     @State private var quickDictateSessionID = UUID()
     @State private var showFlowActivation = false
+    @State private var intentRouter = AppIntentRouter.shared
 
     init() {
         // whisperService depends on modelDownloadService (it asks it "is X downloaded,
@@ -52,23 +53,44 @@ struct MultilingualWhisperApp: App {
                 guard url.scheme == DictationHandoff.urlScheme else { return }
                 switch url.host {
                 case DictationHandoff.dictateHost:
-                    // A fresh UUID forces SwiftUI to recreate QuickDictateView
-                    // even if the cover is already showing - e.g. the user
-                    // dictated again without dismissing the previous result,
-                    // easy to do now that leaving via the system back gesture
-                    // skips "Done".
-                    quickDictateSessionID = UUID()
-                    quickDictateActive = true
+                    startQuickDictate()
                 case DictationHandoff.startFlowHost:
                     showFlowActivation = true
                 default:
                     break
                 }
             }
+            // App Intents (Shortcuts, Siri, Action Button, Back Tap) leave a request
+            // on the router; a cold launch may have queued one before this view
+            // existed, so check on appear as well as on change.
+            .onAppear { handleIntentRequest() }
+            .onChange(of: intentRouter.sequence) { _, _ in handleIntentRequest() }
             .sheet(isPresented: $showFlowActivation) {
                 FlowActivationView(flowSession: flowSession)
             }
         }
         .modelContainer(modelContainer)
+    }
+
+    /// A fresh UUID forces SwiftUI to recreate QuickDictateView even if the cover
+    /// is already showing - e.g. the user dictated again without dismissing the
+    /// previous result, easy to do now that leaving via the system back gesture
+    /// skips "Done".
+    private func startQuickDictate() {
+        quickDictateSessionID = UUID()
+        quickDictateActive = true
+    }
+
+    private func handleIntentRequest() {
+        guard let request = intentRouter.consume() else { return }
+        DebugLogger.shared.log("App Intent request: \(request)", category: "app")
+        switch request {
+        case .dictate:
+            startQuickDictate()
+        case .startFlow:
+            showFlowActivation = true
+        case .stopFlow:
+            flowSession.end()
+        }
     }
 }

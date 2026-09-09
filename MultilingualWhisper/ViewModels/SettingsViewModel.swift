@@ -32,6 +32,11 @@ final class SettingsViewModel {
         set { settings.autoPunctuation = newValue }
     }
 
+    var cleanupLevel: CleanupLevel {
+        get { settings.cleanupLevel }
+        set { settings.cleanupLevel = newValue }
+    }
+
     var maxRecordDurationSeconds: Int {
         get { settings.maxRecordDurationSeconds }
         set { settings.maxRecordDurationSeconds = newValue }

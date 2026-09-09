@@ -10,17 +10,21 @@ import XCTest
 private actor MockWhisperEngine: WhisperTranscribing {
     private let segments: [WhisperEngine.Segment]
     private let detectedLanguage: String?
+    private let arabicProbability: Float
     private(set) var receivedOptions: [WhisperEngine.TranscriptionOptions] = []
     private(set) var callCount = 0
+    private(set) var arabicLanguageProbabilityCallCount = 0
 
-    init(text: String, detectedLanguage: String? = nil) {
+    init(text: String, detectedLanguage: String? = nil, arabicProbability: Float = 0) {
         self.segments = [WhisperEngine.Segment(text: text, startTime: 0, endTime: 1)]
         self.detectedLanguage = detectedLanguage
+        self.arabicProbability = arabicProbability
     }
 
-    init(segments: [WhisperEngine.Segment], detectedLanguage: String? = nil) {
+    init(segments: [WhisperEngine.Segment], detectedLanguage: String? = nil, arabicProbability: Float = 0) {
         self.segments = segments
         self.detectedLanguage = detectedLanguage
+        self.arabicProbability = arabicProbability
     }
 
     func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment] {
@@ -30,6 +34,11 @@ private actor MockWhisperEngine: WhisperTranscribing {
     }
 
     func detectedLanguageCode() async -> String? { detectedLanguage }
+
+    func arabicLanguageProbability(samples: [Float]) async throws -> Float {
+        arabicLanguageProbabilityCallCount += 1
+        return arabicProbability
+    }
 }
 
 private struct StubModelStore: ModelStoring {
@@ -125,6 +134,46 @@ final class WhisperServiceRoutingTests: XCTestCase {
         let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
 
         XCTAssertEqual(result.text, "hello")
+    }
+
+    func testNativeLIDPreCheckStartsDirectlyWithArabicWhenConfident() async throws {
+        let mock = MockWhisperEngine(text: "بسم الله الرحمن الرحيم", arabicProbability: 0.9)
+        let service = makeService(returning: mock)
+
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2, 0.3])
+
+        let received = await mock.receivedOptions
+        let precheckCalls = await mock.arabicLanguageProbabilityCallCount
+        XCTAssertEqual(precheckCalls, 1)
+        // A confident pre-check should skip straight to Arabic - the draft
+        // pass uses Arabic's own hint, not the usual Singlish-first pass.
+        // A second call follows: the draft segment is exactly 1.0s (the
+        // per-segment reprocessing threshold), so it still gets language-ID
+        // probed like any other segment - this mock has no detectedLanguage
+        // configured, so the probe finds nothing to reroute and the draft
+        // text stands unchanged.
+        XCTAssertEqual(received.count, 2)
+        XCTAssertEqual(received.first?.languageHint, WhisperModelType.arabic.languageHint)
+        XCTAssertEqual(result.modelUsed, .arabic)
+    }
+
+    func testNativeLIDPreCheckLeavesSinglishFirstWhenNotConfidentlyArabic() async throws {
+        // Same text/expectation as testAutoRoutingDraftPassUsesTheSameHintAsAForcedTranscribe -
+        // a low pre-check probability should change nothing about existing routing.
+        let mock = MockWhisperEngine(text: "wallah jalan jalan cari makan lah", arabicProbability: 0.1)
+        let service = makeService(returning: mock)
+
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2, 0.3])
+
+        let received = await mock.receivedOptions
+        let precheckCalls = await mock.arabicLanguageProbabilityCallCount
+        XCTAssertEqual(precheckCalls, 1)
+        // Second call is per-segment reprocessing's language-ID probe on the
+        // one (1.0s) draft segment - same reasoning as the confident-Arabic
+        // case above.
+        XCTAssertEqual(received.count, 2)
+        XCTAssertEqual(received.first?.languageHint, WhisperModelType.singlish.languageHint)
+        XCTAssertEqual(result.modelUsed, .singlish)
     }
 
     func testCustomDictionaryCorrectionsApplyToTheFinalTextEndToEnd() async throws {

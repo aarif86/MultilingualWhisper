@@ -159,7 +159,9 @@ final class WhisperService {
     ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
 
-        let firstEngine = try await loadEngine(for: defaultModel)
+        let effectiveDefaultModel = try await resolveDefaultModel(samples: samples, fallback: defaultModel)
+
+        let firstEngine = try await loadEngine(for: effectiveDefaultModel)
         // Force the same language hint the live preview already used for this
         // model (previously `nil`, i.e. let whisper.cpp auto-detect the language
         // from scratch) - nothing ever consumed that auto-detected language, and
@@ -172,8 +174,8 @@ final class WhisperService {
         let draftSegments = try await runChunkedWithSegments(
             samples: samples,
             engine: firstEngine,
-            languageHint: defaultModel.languageHint,
-            initialPrompt: defaultModel.initialPrompt,
+            languageHint: effectiveDefaultModel.languageHint,
+            initialPrompt: effectiveDefaultModel.initialPrompt,
             chunkDurationSeconds: chunkDurationSeconds
         )
         let draftText = draftSegments.map(\.text).joined(separator: " ")
@@ -183,8 +185,11 @@ final class WhisperService {
         // different language - re-decode the whole thing with the better
         // model. Still the right call for e.g. a fully-Arabic recording,
         // where per-segment reprocessing below would just be doing the same
-        // whole-clip re-decode in slower, smaller pieces.
-        let shouldRerouteWhole = classification.recommendedModel != defaultModel
+        // whole-clip re-decode in slower, smaller pieces. Compares against
+        // effectiveDefaultModel (not the raw defaultModel parameter) since
+        // that's the model the draft pass actually ran on - resolveDefaultModel's
+        // native pre-check may have already swapped it to Arabic.
+        let shouldRerouteWhole = classification.recommendedModel != effectiveDefaultModel
             && classification.confidence >= reroutingConfidenceThreshold
             && modelStore.isDownloaded(classification.recommendedModel)
 
@@ -220,15 +225,46 @@ final class WhisperService {
         // attempted, so there was no Malay keyword left in the final text to
         // catch. Probe each segment's own AUDIO directly instead of only
         // ever re-reading whatever text the default model already committed to.
-        let finalSegments = await reprocessSegments(draftSegments, fullSamples: samples, defaultModel: defaultModel)
+        // Uses effectiveDefaultModel, same reasoning as shouldRerouteWhole above -
+        // reprocessSegments looks up the already-loaded engine for this model,
+        // which must match whichever engine actually produced draftSegments.
+        let finalSegments = await reprocessSegments(draftSegments, fullSamples: samples, defaultModel: effectiveDefaultModel)
         let finalText = finalSegments.map(\.text).joined(separator: " ")
         let finalClassification = classifier.classify(text: finalText)
         return TranscriptionResult(
             text: finalText,
-            modelUsed: defaultModel,
+            modelUsed: effectiveDefaultModel,
             languageTag: finalClassification.languageTag,
             languageComponents: finalClassification.components
         )
+    }
+
+    /// Cheap, audio-based pre-check (see `WhisperEngine.arabicLanguageProbability`)
+    /// that swaps the two-pass auto-routing's starting model from Singlish to
+    /// Arabic when the audio is confidently Arabic - avoiding a full Singlish
+    /// transcription pass that the text classifier below would end up discarding
+    /// anyway. Only ever a latency optimization, never a correctness requirement:
+    /// any failure here (engine not loadable, native call throws) just falls back
+    /// to `fallback` and lets the existing draft-transcribe-then-classify routing
+    /// below reach the same answer the slower way, as it already did before this
+    /// existed. NOT YET VERIFIED ON A REAL DEVICE - see the doc comment on
+    /// `WhisperEngine.arabicLanguageProbability`.
+    private func resolveDefaultModel(samples: [Float], fallback: WhisperModelType) async throws -> WhisperModelType {
+        guard fallback != .arabic, modelStore.isDownloaded(.arabic) else { return fallback }
+
+        let prefixCount = min(samples.count, Int(3.0 * Constants.sampleRate))
+        guard let checkEngine = try? await loadEngine(for: fallback),
+              let probability = try? await checkEngine.arabicLanguageProbability(samples: Array(samples.prefix(prefixCount))),
+              probability >= Constants.arabicPreCheckThreshold
+        else {
+            return fallback
+        }
+
+        DebugLogger.shared.log(
+            "native LID pre-check: arabicProbability=\(probability) - starting with Arabic model instead of \(fallback.rawValue)",
+            category: "whisper"
+        )
+        return .arabic
     }
 
     /// Below this, whisper.cpp's own language detection gets meaningfully

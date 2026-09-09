@@ -114,6 +114,45 @@ actor WhisperEngine {
         guard id >= 0, let cStr = whisper_lang_str(id) else { return nil }
         return String(cString: cStr)
     }
+
+    /// Runs whisper.cpp's own audio-based language detection - just the encoder
+    /// plus a cheap classification head (`whisper_pcm_to_mel` + `whisper_lang_auto_detect`),
+    /// not a full decode - to answer one narrow question: how likely is this audio
+    /// to be Arabic? Whisper's own language IDs have no concept of "Singlish" vs.
+    /// standard English, so this can only meaningfully help the Arabic/non-Arabic
+    /// routing decision, not the finer classification `RuleBasedLanguageClassifier`
+    /// already does from text - see docs/code-switching-research.md Part 4, where
+    /// `whisper_lang_auto_detect`'s exact signature was confirmed directly against
+    /// this app's pinned whisper.cpp submodule commit.
+    ///
+    /// NOT YET VERIFIED ON A REAL DEVICE - written and reasoned through without a
+    /// Mac in this session. Compiles and is exercised by
+    /// `WhisperServiceRoutingTests` against a fake engine, but the actual native
+    /// call sequence (`whisper_pcm_to_mel` then `whisper_lang_auto_detect` against
+    /// a real loaded context) has not run once for real. Confirm it behaves before
+    /// this reaches TestFlight.
+    func arabicLanguageProbability(samples: [Float]) throws -> Float {
+        guard !samples.isEmpty else { throw EngineError.emptyAudio }
+
+        let threadCount = Int32(max(1, ProcessInfo.processInfo.activeProcessorCount - 1))
+        let melStatus = samples.withUnsafeBufferPointer { buffer in
+            whisper_pcm_to_mel(context, buffer.baseAddress, Int32(buffer.count), threadCount)
+        }
+        guard melStatus == 0 else { throw EngineError.transcriptionFailed }
+
+        let arabicId = whisper_lang_id("ar")
+        guard arabicId >= 0 else { return 0 }
+
+        let maxId = whisper_lang_max_id()
+        guard maxId >= 0 else { return 0 }
+
+        var probabilities = [Float](repeating: 0, count: Int(maxId) + 1)
+        let bestId = probabilities.withUnsafeMutableBufferPointer { buffer in
+            whisper_lang_auto_detect(context, 0, threadCount, buffer.baseAddress)
+        }
+        guard bestId >= 0, Int(arabicId) < probabilities.count else { return 0 }
+        return probabilities[Int(arabicId)]
+    }
 }
 
 /// What `WhisperService` actually needs from a loaded model. `WhisperEngine`
@@ -126,6 +165,7 @@ actor WhisperEngine {
 /// See `WhisperServiceRoutingTests`.
 protocol WhisperTranscribing: Sendable {
     func transcribe(samples: [Float], options: WhisperEngine.TranscriptionOptions) async throws -> [WhisperEngine.Segment]
+    func arabicLanguageProbability(samples: [Float]) async throws -> Float
     /// See `WhisperEngine.detectedLanguageCode()`. Part of the protocol (not
     /// just a `WhisperEngine`-only method) so `WhisperService`'s per-segment
     /// code-switching reprocessing can call it without downcasting away from

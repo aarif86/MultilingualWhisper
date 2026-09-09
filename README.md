@@ -36,6 +36,15 @@ below for what's still deliberately simplified.
   that it would do meaningfully better. This two-pass design exists because
   keyword/script matching needs *text*, which you don't have until something has
   already transcribed the audio once.
+- **Custom Dictionary** - deterministic find/replace on the final text, after any
+  model has produced it (`DictionaryMatcher`). One written form, many spoken
+  forms ("Nassar", "Nasser" → "Nasar"); whole-word and case-sensitive toggles per
+  entry; single pass with longest phrase winning; word boundaries that work for
+  Arabic/Jawi as well as Latin, with tashkeel and alef variants tolerated on
+  match. Import a CSV/TSV, a one-word-per-line list, or `Nassar -> Nasar` lines
+  pasted from Notes (`DictionaryImporter`); export as CSV. Chosen over
+  `initial_prompt` decoder biasing because it carries zero decoder risk - see
+  `docs/DICTATION-PLAYBOOK.md` §3.4.
 - **History & Settings** - transcriptions persist via SwiftData; app preferences via
   `UserDefaults`.
 

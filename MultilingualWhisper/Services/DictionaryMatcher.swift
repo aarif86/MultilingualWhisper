@@ -59,7 +59,7 @@ struct DictionaryMatcher {
             let r = rhs.element.spokenForm.unicodeScalars.count
             return l != r ? l > r : lhs.offset < rhs.offset
         }
-        rules = sorted.map(\.element)
+        rules = sorted.map { $0.element }
 
         let groups = rules.map { rule in
             Self.groupPattern(for: rule.spokenForm, wholeWord: rule.wholeWord, matchCase: rule.matchCase)

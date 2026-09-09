@@ -41,6 +41,9 @@ final class FlowSessionEngine {
 
     private var samples: [Float] = []
     private var isCapturingUtterance = false
+    /// The utterance being captured was started in command mode (keyboard
+    /// long-press) - it will be interpreted as a `VoiceCommand`, never inserted.
+    private var isCommandUtterance = false
     private var utteranceStartDate: Date?
     private var sampleStreamTask: Task<Void, Never>?
     private var sampleContinuation: AsyncStream<[Float]>.Continuation?
@@ -150,6 +153,7 @@ final class FlowSessionEngine {
         // every *shared* field finishUtterance(publish: false) would have
         // touched, so nothing here is actually lost by not calling it.
         isCapturingUtterance = false
+        isCommandUtterance = false
         isRecording = false
         samples.removeAll(keepingCapacity: true)
         idleTimer?.invalidate()
@@ -196,6 +200,8 @@ final class FlowSessionEngine {
         guard isActive, !isCapturingUtterance else { return }
         samples.removeAll(keepingCapacity: true)
         isCapturingUtterance = true
+        isCommandUtterance = FlowSessionState.consumeRequestedCommandMode()
+        FlowSessionState.utteranceIsCommand = isCommandUtterance
         utteranceStartDate = Date()
         isRecording = true
         FlowSessionState.isRecording = true
@@ -236,10 +242,44 @@ final class FlowSessionEngine {
             signalFailure()
             return
         }
+        if isCommandUtterance {
+            isCommandUtterance = false
+            FlowSessionState.utteranceIsCommand = false
+            await interpretCommand(captured)
+            return
+        }
         // On disk *before* decoding: whatever the decode does next, the words
         // are safe and History can re-run them (UtteranceAudioStore).
         let audioFileName = settings.keepRecentAudio ? UtteranceAudioStore.save(samples: captured) : nil
         await transcribeAndPublish(captured, duration: duration, audioFileName: audioFileName)
+    }
+
+    /// Command-mode path: decode, match against `VoiceCommandParser`, and hand
+    /// the keyboard a command to execute - never text to insert. An utterance
+    /// that matches nothing is reported as such so the keyboard can say what it
+    /// heard rather than silently doing nothing. Commands are short and never
+    /// worth keeping: no History entry, no clipboard, no audio kept.
+    private func interpretCommand(_ samples: [Float]) async {
+        do {
+            let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)
+            let result: WhisperService.TranscriptionResult
+            if let forcedModel = settings.languageMode.pinnedModel {
+                result = try await whisperService.transcribe(samples: samples, using: forcedModel, chunkDurationSeconds: chunkSeconds)
+            } else {
+                result = try await whisperService.transcribeWithAutoRouting(samples: samples, chunkDurationSeconds: chunkSeconds)
+            }
+            if let command = VoiceCommandParser.parse(result.text) {
+                DictationHandoff.publishCommand(command.payload)
+                DebugLogger.shared.log("FlowSession command: \(command.displayName)", category: "flow")
+            } else {
+                DictationHandoff.publishCommand(.unrecognized(result.text))
+                DebugLogger.shared.log("FlowSession command not recognised: \(result.text)", category: "flow")
+            }
+            DarwinNotification.post(FlowSessionState.stateChanged)
+        } catch {
+            DebugLogger.shared.log("FlowSession command decode failed: \(error)", category: "flow")
+            signalFailure()
+        }
     }
 
     private func signalFailure() {

@@ -303,4 +303,56 @@ final class FlowSessionEngineTests: XCTestCase {
 
         XCTAssertTrue(engine.isActive)
     }
+
+    // MARK: - Command mode
+
+    func testCommandModeUtterancePublishesACommandNotText() async {
+        DictationHandoff.clearPendingCommand()
+        let engine = makeEngine(returning: MockWhisperEngine(text: "New line."))
+        engine.test_markActive()
+        FlowSessionState.requestedCommandMode = true
+
+        engine.test_handleStartSignal()
+        XCTAssertTrue(FlowSessionState.utteranceIsCommand)
+        XCTAssertFalse(FlowSessionState.requestedCommandMode, "the request is consumed, never re-used")
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(DictationHandoff.pendingCommand().flatMap(VoiceCommand.init(payload:)), .newLine)
+        XCTAssertNil(DictationHandoff.pending(), "a command is never inserted as text")
+        XCTAssertTrue(engine.test_historyRecords().isEmpty, "commands are not worth keeping")
+        XCTAssertFalse(FlowSessionState.utteranceIsCommand)
+        DictationHandoff.clearPendingCommand()
+    }
+
+    func testUnrecognisedCommandIsReportedNotDropped() async {
+        DictationHandoff.clearPendingCommand()
+        let engine = makeEngine(returning: MockWhisperEngine(text: "we go makan"))
+        engine.test_markActive()
+        FlowSessionState.requestedCommandMode = true
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        let payload = DictationHandoff.pendingCommand()
+        XCTAssertTrue(payload?.isUnrecognized ?? false)
+        XCTAssertEqual(payload?.argument, "we go makan")
+        XCTAssertNil(DictationHandoff.pending())
+        DictationHandoff.clearPendingCommand()
+    }
+
+    func testOrdinaryDictationIsNeverTreatedAsACommand() async {
+        DictationHandoff.clearPendingCommand()
+        let engine = makeEngine(returning: MockWhisperEngine(text: "new line"))
+        engine.test_markActive()
+        // No command mode requested: "new line" is just words.
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertNil(DictationHandoff.pendingCommand())
+        XCTAssertEqual(DictationHandoff.pending()?.text, "new line")
+    }
 }

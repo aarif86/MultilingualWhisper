@@ -24,8 +24,14 @@ struct KeyboardView: View {
     /// A spelling fix the user made by hand to the last insert, offered for the
     /// Custom Dictionary - see CorrectionLearner.
     let suggestedCorrection: CorrectionLearner.Correction?
+    /// A command-mode utterance the app could not match to any command.
+    let unrecognizedCommand: String?
     let flowState: FlowUIState
     let onStartListening: () -> Void
+    /// Long-press on the mic: the next utterance is a VoiceCommand.
+    let onStartCommand: () -> Void
+    let onInsertUnrecognized: () -> Void
+    let onDismissUnrecognized: () -> Void
     let onStopListening: () -> Void
     let onUndoInsert: () -> Void
     let onLearnCorrection: () -> Void
@@ -40,7 +46,9 @@ struct KeyboardView: View {
                 // (see KeyboardViewController.autoInsertPendingResult) - this
                 // row is the confirmation of what just got typed, and the
                 // one-tap fix if it heard you wrong.
-                if let suggestedCorrection {
+                if let unrecognizedCommand {
+                    unrecognizedRow(unrecognizedCommand)
+                } else if let suggestedCorrection {
                     learnRow(suggestedCorrection)
                 } else if let lastInsertedText {
                     undoInsertRow(lastInsertedText)
@@ -111,14 +119,55 @@ struct KeyboardView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.borderedProminent)
+            // Long-press = command mode. Kept on the same control so the
+            // boundary between "dictate" and "command" is the gesture itself,
+            // never a guess about the words (see VoiceCommand).
+            .highPriorityGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onStartCommand() })
 
             if let minutes = minutesUntilIdleTimeout {
                 Text("Flow turns off in \(minutes) min if unused - tap to speak keeps it on")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+            } else {
+                Text("Hold for a command: new line, delete that, full stop\u{2026}")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
+    }
+
+    /// The app heard a command-mode utterance but matched no command. Say what it
+    /// heard and let the user decide - insert it as text, or drop it.
+    private func unrecognizedRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "questionmark.circle")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Not a command I know")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("\u{201C}\(text)\u{201D}")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            Spacer(minLength: 0)
+            Button("Insert") { onInsertUnrecognized() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            Button {
+                onDismissUnrecognized()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Idle timeout hints (read straight from the shared state; the
@@ -146,7 +195,12 @@ struct KeyboardView: View {
             // own in-progress-recording state, not "waveform" (which reads as
             // a passive "it's on" indicator rather than a control you can
             // tap to stop).
-            Label("Listening\u{2026} \(Int(elapsed))s - tap to stop", systemImage: "stop.fill")
+            Label(
+                FlowSessionState.utteranceIsCommand
+                    ? "Say a command\u{2026} \(Int(elapsed))s - tap to stop"
+                    : "Listening\u{2026} \(Int(elapsed))s - tap to stop",
+                systemImage: "stop.fill"
+            )
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -250,8 +304,12 @@ struct KeyboardView: View {
         hasFullAccess: true,
         lastInsertedText: nil,
         suggestedCorrection: nil,
+        unrecognizedCommand: nil,
         flowState: .inactive,
         onStartListening: {},
+        onStartCommand: {},
+        onInsertUnrecognized: {},
+        onDismissUnrecognized: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -265,8 +323,12 @@ struct KeyboardView: View {
         hasFullAccess: true,
         lastInsertedText: nil,
         suggestedCorrection: nil,
+        unrecognizedCommand: nil,
         flowState: .listening(elapsed: 4),
         onStartListening: {},
+        onStartCommand: {},
+        onInsertUnrecognized: {},
+        onDismissUnrecognized: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -280,8 +342,12 @@ struct KeyboardView: View {
         hasFullAccess: true,
         lastInsertedText: "Bismillah, let's go makan lah",
         suggestedCorrection: nil,
+        unrecognizedCommand: nil,
         flowState: .readyToListen,
         onStartListening: {},
+        onStartCommand: {},
+        onInsertUnrecognized: {},
+        onDismissUnrecognized: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},

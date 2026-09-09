@@ -44,6 +44,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        autoInsertPendingResult()
         setupHostedView()
         setupNextKeyboardButton()
 
@@ -108,20 +109,32 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func refresh() {
+        autoInsertPendingResult()
         hostingController?.rootView = makeView()
     }
 
     private func makeView() -> KeyboardView {
         KeyboardView(
             hasFullAccess: hasFullAccess,
-            pending: DictationHandoff.pending(),
             lastInsertedText: lastInsertedText,
             flowState: currentFlowUIState(),
             onStartListening: { [weak self] in self?.startListening() },
             onStopListening: { [weak self] in self?.stopListening() },
-            onInsert: { [weak self] text in self?.insert(text) },
             onUndoInsert: { [weak self] in self?.undoLastInsert() }
         )
+    }
+
+    /// A finished dictation used to sit as a "Tap to insert" row until the
+    /// user tapped it - an extra step that only ever had one right answer
+    /// (insert it), since a wrong result already has its own fix: the
+    /// undo row below inserts-then-lets-you-remove instead of asking for
+    /// confirmation before typing anything at all. Draining pending here
+    /// covers every path that can make a fresh result relevant (initial
+    /// load, tick, Darwin notification, viewWillAppear/textDidChange) since
+    /// they all funnel through refresh() or this same call in viewDidLoad.
+    private func autoInsertPendingResult() {
+        guard let pending = DictationHandoff.pending() else { return }
+        insert(pending.text)
     }
 
     // MARK: - Flow session UI state

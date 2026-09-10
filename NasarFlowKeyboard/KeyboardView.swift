@@ -26,6 +26,8 @@ struct KeyboardView: View {
     let suggestedCorrection: CorrectionLearner.Correction?
     /// A command-mode utterance the app could not match to any command.
     let unrecognizedCommand: String?
+    /// A command that was understood but had nothing to act on.
+    let commandNotice: String?
     let flowState: FlowUIState
     /// The style pill: what the user picked, and what `auto` resolves to for
     /// the current field - see DictationStyle.
@@ -37,6 +39,7 @@ struct KeyboardView: View {
     let onStartCommand: () -> Void
     let onInsertUnrecognized: () -> Void
     let onDismissUnrecognized: () -> Void
+    let onDismissNotice: () -> Void
     let onStopListening: () -> Void
     let onUndoInsert: () -> Void
     let onLearnCorrection: () -> Void
@@ -53,6 +56,8 @@ struct KeyboardView: View {
                 // one-tap fix if it heard you wrong.
                 if let unrecognizedCommand {
                     unrecognizedRow(unrecognizedCommand)
+                } else if let commandNotice {
+                    noticeRow(commandNotice)
                 } else if let suggestedCorrection {
                     learnRow(suggestedCorrection)
                 } else if let lastInsertedText {
@@ -202,6 +207,28 @@ struct KeyboardView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
+    private func noticeRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            Button {
+                onDismissNotice()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
     // MARK: - Idle timeout hints (read straight from the shared state; the
     // controller re-creates this view on every tick, so they stay current)
 
@@ -337,6 +364,7 @@ struct KeyboardView: View {
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .inactive,
         style: .auto,
         resolvedStyle: .notes,
@@ -345,6 +373,7 @@ struct KeyboardView: View {
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -359,6 +388,7 @@ struct KeyboardView: View {
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .listening(elapsed: 4),
         style: .messaging,
         resolvedStyle: .messaging,
@@ -367,6 +397,7 @@ struct KeyboardView: View {
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -381,6 +412,7 @@ struct KeyboardView: View {
         lastInsertedText: "Bismillah, let's go makan lah",
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .readyToListen,
         style: .auto,
         resolvedStyle: .messaging,
@@ -389,6 +421,7 @@ struct KeyboardView: View {
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},

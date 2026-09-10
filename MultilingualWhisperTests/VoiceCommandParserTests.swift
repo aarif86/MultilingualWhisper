@@ -72,6 +72,42 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(parse("type Tampines MRT"), .literal("Tampines MRT"))
     }
 
+    // MARK: - Change X to Y / spell
+
+    func testChangeXToY() {
+        XCTAssertEqual(parse("change tea to tee"), .replace(target: "tea", replacement: "tee"))
+        XCTAssertEqual(parse("Correct tampines to Tampines."), .replace(target: "tampines", replacement: "Tampines"))
+        XCTAssertEqual(parse("replace we go with we went"), .replace(target: "we go", replacement: "we went"))
+        XCTAssertEqual(parse("Change, tea, to tee."), .replace(target: "tea", replacement: "tee"))
+    }
+
+    func testChangeWithSpelledLettersJoinsThemLowercase() {
+        XCTAssertEqual(parse("change tea to T E E"), .replace(target: "tea", replacement: "tee"))
+        XCTAssertEqual(parse("Change tea to T-E-E."), .replace(target: "tea", replacement: "tee"))
+        XCTAssertEqual(parse("change tea to T. E. E."), .replace(target: "tea", replacement: "tee"))
+        XCTAssertEqual(parse("change ali to a l y"), .replace(target: "ali", replacement: "aly"))
+    }
+
+    func testChangeInMalayAndArabic() {
+        XCTAssertEqual(parse("tukar makan kepada minum"), .replace(target: "makan", replacement: "minum"))
+        XCTAssertEqual(parse("ganti pergi dengan balik"), .replace(target: "pergi", replacement: "balik"))
+        XCTAssertEqual(parse("\u{063A}\u{064A}\u{0631} \u{0634}\u{0643}\u{0631}\u{0627} \u{0625}\u{0644}\u{0649} \u{0645}\u{0631}\u{062D}\u{0628}\u{0627}"), .replace(target: "\u{0634}\u{0643}\u{0631}\u{0627}", replacement: "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627}"))
+    }
+
+    func testSpellInsertsTheLettersAsACapitalisedWord() {
+        XCTAssertEqual(parse("spell A L Y"), .spell("Aly"))
+        XCTAssertEqual(parse("Spell n-a-s-a-r."), .spell("Nasar"))
+        XCTAssertEqual(parse("spell NASAR"), .spell("Nasar"))
+        XCTAssertEqual(parse("eja a l i"), .spell("Ali"))
+        XCTAssertNil(parse("spell it out for me"), "several words are not letters")
+    }
+
+    func testChangeIsNotTriggeredWithoutBothSides() {
+        XCTAssertNil(parse("change to tampines"))
+        XCTAssertNil(parse("change"))
+        XCTAssertEqual(parse("type change tea to tee"), .literal("change tea to tee"))
+    }
+
     // MARK: - Not commands
 
     func testOrdinaryDictationIsNotACommand() {
@@ -88,6 +124,7 @@ final class VoiceCommandParserTests: XCTestCase {
         let commands: [VoiceCommand] = [
             .newLine, .newParagraph, .deleteThat, .deleteWord, .deleteLine, .period, .comma,
             .questionMark, .exclamationMark, .capitaliseThat, .allCapsThat, .lowercaseThat, .literal("hi there"),
+            .replace(target: "tea", replacement: "tee"), .spell("Aly"),
         ]
         for command in commands {
             let data = try JSONEncoder().encode(command.payload)

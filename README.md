@@ -141,6 +141,8 @@ colloquial and Singlish forms are left for native speakers to add):
 | capitalise that · huruf besar | Tampines |
 | all caps that · semua huruf besar | MRT |
 | lowercase that · huruf kecil | mrt |
+| change X to Y / correct X to Y / replace X with Y · tukar X kepada Y · غير X إلى Y | rewrites the last X before the cursor; a Y spoken as letters ("T E E") is joined, and X's capitals are kept (Tampines, MRT) |
+| spell A L Y · eja … | inserts the letters as one word, first letter capitalised ("Aly"); say "all caps that" for an acronym |
 | literally / type / insert … · tulis … · اكتب … | inserts the rest as ordinary text |
 
 Anything else said in command mode shows up in the keyboard as "Not a command

@@ -52,6 +52,29 @@ final class WhisperServiceRoutingTests: XCTestCase {
         WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), cleanupLevel: { .raw }, makeEngine: { _ in mock })
     }
 
+    // MARK: - Timings
+
+    func testEveryPublicDecodeRecordsItsTimings() async throws {
+        let service = makeService(returning: MockWhisperEngine(text: "hello"))
+        XCTAssertNil(service.lastTimings)
+
+        _ = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+        let forced = try XCTUnwrap(service.lastTimings)
+        XCTAssertGreaterThanOrEqual(forced.total, forced.format)
+        XCTAssertEqual(forced.decode, forced.total - forced.format, accuracy: 0.000_001)
+
+        _ = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        let routed = try XCTUnwrap(service.lastTimings)
+        XCTAssertGreaterThanOrEqual(routed.total, 0)
+        XCTAssertGreaterThanOrEqual(routed.format, 0)
+    }
+
+    func testTimingsAreRecordedEvenWhenTheDecodeThrows() async {
+        let service = makeService(returning: MockWhisperEngine(text: "hello"))
+        _ = try? await service.transcribe(samples: [], using: .singlish)
+        XCTAssertNotNil(service.lastTimings, "a thrown decode still leaves a timing, so a failure's cost is visible too")
+    }
+
     // MARK: - Dictionary and formatter reach every path
 
     /// Auto-Detect (the default) used to skip the dictionary and formatter

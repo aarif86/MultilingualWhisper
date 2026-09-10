@@ -213,6 +213,11 @@ final class TranscriptionViewModel {
                 phase = .idle
 
                 saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
+                if let timings = whisperService.lastTimings {
+                    let stage = StageTimings(recordedAt: Date(), source: "app", capture: duration, decode: timings.decode, format: timings.format, handoff: nil)
+                    LatencyLog.shared.record(stage)
+                    DebugLogger.shared.log("\(stage.line) | \(LatencyLog.shared.summary() ?? "")", category: "latency")
+                }
             } catch {
                 DebugLogger.shared.log("stopAndTranscribe failed: \(error)", category: "viewmodel")
                 phase = .error(error.localizedDescription)

@@ -64,6 +64,10 @@ final class FlowSessionEngineTests: XCTestCase {
         // FlowSessionEngine's own init().
         FlowSessionState.clear()
         DictationHandoff.clearPending()
+        // Style is a preference that survives clear() - reset it explicitly so a
+        // test that picks one can't leak into the next.
+        FlowSessionState.dictationStyle = .auto
+        FlowSessionState.hostFieldHint = .general
     }
 
     private func makeEngine(
@@ -339,6 +343,58 @@ final class FlowSessionEngineTests: XCTestCase {
         XCTAssertTrue(payload?.isUnrecognized ?? false)
         XCTAssertEqual(payload?.argument, "we go makan")
         XCTAssertNil(DictationHandoff.pending())
+        DictationHandoff.clearPendingCommand()
+    }
+
+    // MARK: - Styles
+
+    func testChatStyleIsAppliedToTheNextUtteranceOnly() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "see you there."))
+        engine.test_markActive()
+        FlowSessionState.dictationStyle = .auto
+        FlowSessionState.hostFieldHint = .messaging
+
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(DictationHandoff.pending()?.text, "see you there", "Auto in a Send-key field is Chat: the lone trailing full stop goes")
+        DictationHandoff.clearPending()
+
+        // Field changed underneath the session - the next utterance follows it.
+        FlowSessionState.hostFieldHint = .general
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(DictationHandoff.pending()?.text, "see you there.")
+    }
+
+    func testExplicitEmailStyleWinsOverTheField() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "see you at three pm"))
+        engine.test_markActive()
+        FlowSessionState.dictationStyle = .email
+        FlowSessionState.hostFieldHint = .messaging
+
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(DictationHandoff.pending()?.text, "See you at 3pm.")
+    }
+
+    func testCommandsAreNeverStyled() async {
+        DictationHandoff.clearPendingCommand()
+        let engine = makeEngine(returning: MockWhisperEngine(text: "Full stop."))
+        engine.test_markActive()
+        FlowSessionState.dictationStyle = .exact
+        FlowSessionState.requestedCommandMode = true
+
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertEqual(DictationHandoff.pendingCommand().flatMap(VoiceCommand.init(payload:)), .period)
         DictationHandoff.clearPendingCommand()
     }
 

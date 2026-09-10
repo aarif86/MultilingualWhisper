@@ -52,6 +52,47 @@ final class WhisperServiceRoutingTests: XCTestCase {
         WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), cleanupLevel: { .raw }, makeEngine: { _ in mock })
     }
 
+    // MARK: - Dictionary and formatter reach every path
+
+    /// Auto-Detect (the default) used to skip the dictionary and formatter
+    /// whenever no whole-clip reroute happened - the most common outcome.
+    func testAutoRoutingWithoutRerouteStillFormatsAndCorrects() async throws {
+        let dictionary = CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests-\(UUID())")!)
+        dictionary.add(original: "m r t", replacement: "MRT")
+        let service = WhisperService(
+            modelStore: StubModelStore(),
+            customDictionary: dictionary,
+            cleanupLevel: { .light },
+            makeEngine: { _ in MockWhisperEngine(text: "um we take the m r t") }
+        )
+
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+
+        XCTAssertEqual(result.text, "We take the MRT")
+    }
+
+    func testForcedModelFormatsOnceOverTheWholeText() async throws {
+        let service = WhisperService(
+            modelStore: StubModelStore(),
+            customDictionary: CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests-\(UUID())")!),
+            cleanupLevel: { .light },
+            makeEngine: { _ in MockWhisperEngine(text: "um hello there") }
+        )
+
+        let result = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+
+        XCTAssertEqual(result.text, "Hello there")
+    }
+
+    func testActiveStyleAppliesToAutoRouting() async throws {
+        let service = makeService(returning: MockWhisperEngine(text: "see you there."))
+        service.activeStyle = DictationStyle.messaging.profile(hint: .general)
+
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+
+        XCTAssertEqual(result.text, "see you there")
+    }
+
     /// For tests that need DIFFERENT engines per model (e.g. the default
     /// model's probe detects Malay, so a separate Malay mock should be the
     /// one that actually re-decodes) - `StubModelStore.localURL` bakes the

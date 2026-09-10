@@ -78,6 +78,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        updateHostFieldHint()
         refresh()
     }
 
@@ -85,7 +86,33 @@ final class KeyboardViewController: UIInputViewController {
         // Called on selection/context changes too - a reasonable proxy for
         // "the keyboard is visible again", e.g. after switching back from the
         // main app, so the pending-insert row shows up without extra plumbing.
+        updateHostFieldHint()
         detectCorrection()
+        refresh()
+    }
+
+    // MARK: - Style (see DictationStyle)
+
+    /// Reads what the field says about itself and shares it with the app, which
+    /// resolves the Auto style from it for the next utterance. Traits are all a
+    /// keyboard extension can see of its host - there is no host app identity.
+    private func updateHostFieldHint() {
+        let proxy = textDocumentProxy
+        let hint = HostFieldHint(
+            returnKey: proxy.returnKeyType ?? .default,
+            keyboard: proxy.keyboardType ?? .default,
+            autocapitalization: proxy.autocapitalizationType ?? .sentences,
+            isSecure: proxy.isSecureTextEntry ?? false
+        )
+        if hint != FlowSessionState.hostFieldHint {
+            FlowSessionState.hostFieldHint = hint
+            DebugLogger.shared.log("Field hint: \(hint.rawValue)", category: "keyboard")
+        }
+    }
+
+    private func cycleStyle() {
+        FlowSessionState.dictationStyle = FlowSessionState.dictationStyle.next
+        DebugLogger.shared.log("Style picked: \(FlowSessionState.dictationStyle.rawValue)", category: "keyboard")
         refresh()
     }
 
@@ -166,6 +193,9 @@ final class KeyboardViewController: UIInputViewController {
             unrecognizedCommand: unrecognizedCommandText,
             commandNotice: commandNotice,
             flowState: currentFlowUIState(),
+            style: FlowSessionState.dictationStyle,
+            resolvedStyle: FlowSessionState.resolvedStyle,
+            onCycleStyle: { [weak self] in self?.cycleStyle() },
             onStartListening: { [weak self] in self?.startListening() },
             onStartCommand: { [weak self] in self?.startCommandListening() },
             onInsertUnrecognized: { [weak self] in self?.insertUnrecognizedAsText() },

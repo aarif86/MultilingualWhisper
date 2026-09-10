@@ -72,6 +72,70 @@ enum TranscriptFormatter {
         format(text, options: .forLevel(level))
     }
 
+    /// The level's passes with a `DictationStyle`'s overrides on top, then the
+    /// style's finishing touches (trailing full stop, spaces). A forced switch runs
+    /// even at Raw: "Exact" in an email field has to join the address whatever the
+    /// Cleanup setting says, and `.standard` changes nothing at any level.
+    static func format(_ text: String, level: CleanupLevel, profile: StyleProfile) -> String {
+        var options = Options.forLevel(level)
+        switch profile.numbers {
+        case .force: options.inverseTextNormalization = true
+        case .suppress: options.inverseTextNormalization = false
+        case .inherit: break
+        }
+        switch profile.capitalise {
+        case .force: options.capitalizeSentences = true
+        case .suppress: options.capitalizeSentences = false
+        case .inherit: break
+        }
+        return finish(format(text, options: options), profile: profile)
+    }
+
+    // MARK: - 5. Style finishing
+
+    private static let sentenceTerminators = CharacterSet(charactersIn: ".!?\u{061F}")
+    private static let closers = CharacterSet(charactersIn: "\"'\u{201D}\u{2019})]\u{00BB}")
+
+    private static func endsSecondSentence(_ text: String) -> Bool {
+        var previousWasTerminator = false
+        for scalar in text.dropLast().unicodeScalars {
+            if previousWasTerminator, scalar == " " || scalar == "\n" { return true }
+            previousWasTerminator = sentenceTerminators.contains(scalar)
+        }
+        return false
+    }
+
+    /// Applies the parts of a style that act on the finished text rather than on
+    /// the passes: the trailing full stop rule and whitespace stripping.
+    static func finish(_ text: String, profile: StyleProfile) -> String {
+        guard profile != .standard else { return text }
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.isEmpty else { return result }
+
+        switch profile.trailingPeriod {
+        case .keep:
+            break
+        case .drop:
+            // Only a lone full stop closing a single sentence: "see you there." ->
+            // "see you there". A second sentence, "?", "!" or "..." all stay. A
+            // terminator counts as a sentence break only when a space follows it,
+            // so "flow.nasar.sg." and "at 3.5." still lose their closing stop.
+            if result.hasSuffix("."), !result.hasSuffix(".."), !endsSecondSentence(result) {
+                result = String(result.dropLast())
+            }
+        case .ensure:
+            let body = result.unicodeScalars.reversed().drop { closers.contains($0) }
+            if let last = body.first, !sentenceTerminators.contains(last), last != ",", last != ":", last != ";" {
+                result += "."
+            }
+        }
+
+        if profile.stripWhitespace {
+            result = result.split(whereSeparator: { $0.isWhitespace }).joined()
+        }
+        return result
+    }
+
     static func format(_ text: String, options: Options) -> String {
         guard !text.isEmpty, options != .raw else { return text }
         var result = text

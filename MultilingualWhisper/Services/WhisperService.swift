@@ -90,6 +90,13 @@ final class WhisperService {
     /// Tests pass `{ .raw }` so their exact-string expectations stay byte-for-byte.
     private let cleanupLevel: () -> CleanupLevel
 
+    /// The `DictationStyle` for the decode in progress - `.standard` (no effect)
+    /// unless a caller that knows the destination sets it, which today is only
+    /// `FlowSessionEngine` for keyboard dictations: in-app recordings have no host
+    /// field to style for. Set before a decode and reset after; decodes never
+    /// overlap because there is one microphone.
+    var activeStyle: StyleProfile = .standard
+
     /// Loads (or returns the already-loaded) engine for a model type. Safe to
     /// call repeatedly / concurrently - concurrent callers await the same
     /// in-flight load rather than loading the same 500MB file twice.
@@ -142,13 +149,13 @@ final class WhisperService {
     ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
         let engine = try await loadEngine(for: model)
-        let text = try await runChunked(
+        let text = finalize(try await runChunked(
             samples: samples,
             engine: engine,
             languageHint: model.languageHint,
             initialPrompt: model.initialPrompt,
             chunkDurationSeconds: chunkDurationSeconds
-        )
+        ))
         let classification = classifier.classify(text: text)
         return TranscriptionResult(
             text: text,
@@ -213,13 +220,13 @@ final class WhisperService {
 
         if shouldRerouteWhole {
             let betterEngine = try await loadEngine(for: classification.recommendedModel)
-            let finalText = try await runChunked(
+            let finalText = finalize(try await runChunked(
                 samples: samples,
                 engine: betterEngine,
                 languageHint: classification.recommendedModel.languageHint,
                 initialPrompt: classification.recommendedModel.initialPrompt,
                 chunkDurationSeconds: chunkDurationSeconds
-            )
+            ))
             return TranscriptionResult(
                 text: finalText,
                 modelUsed: classification.recommendedModel,
@@ -241,7 +248,12 @@ final class WhisperService {
         // reprocessSegments looks up the already-loaded engine for this model,
         // which must match whichever engine actually produced draftSegments.
         let finalSegments = await reprocessSegments(draftSegments, fullSamples: samples, defaultModel: effectiveDefaultModel)
-        let finalText = finalSegments.map(\.text).joined(separator: " ")
+        // finalize once over the whole text, never per segment: a dictionary
+        // phrase can span two segments, and capitalisation needs the sentence.
+        // (Until 2026-09-10 this path skipped the dictionary and formatter
+        // entirely - Auto-Detect, the default mode, shipped uncorrected text
+        // whenever no whole-clip reroute happened. Caught by the style tests.)
+        let finalText = finalize(finalSegments.map(\.text).joined(separator: " "))
         let finalClassification = classifier.classify(text: finalText)
         return TranscriptionResult(
             text: finalText,
@@ -352,7 +364,7 @@ final class WhisperService {
               )
         else { return nil }
 
-        let text = joined(segments)
+        let text = rawJoined(segments)
         return text.isEmpty ? nil : text
     }
 
@@ -411,7 +423,7 @@ final class WhisperService {
                 samples: samples,
                 options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
             )
-            return joined(segments)
+            return rawJoined(segments)
         }
 
         var pieces: [String] = []
@@ -422,7 +434,7 @@ final class WhisperService {
                 samples: Array(samples[start..<end]),
                 options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
             )
-            pieces.append(joined(segments))
+            pieces.append(rawJoined(segments))
             start = end
         }
         return pieces.joined(separator: " ")
@@ -475,15 +487,22 @@ final class WhisperService {
         }
     }
 
-    private func joined(_ segments: [WhisperEngine.Segment]) -> String {
-        let text = segments
+    /// Decoder output with whisper's annotation tags stripped and segments joined
+    /// - no dictionary, no formatting. Every decode pass produces this; only the
+    /// final text of a public entry point goes through `finalize`.
+    private func rawJoined(_ segments: [WhisperEngine.Segment]) -> String {
+        segments
             .map { TranscriptSanitizer.stripAnnotationTags($0.text) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        // Dictionary first (it fixes *words*), then the formatter (it fixes *text*) -
-        // so a correction like "m r t" -> "MRT" is in place before capitalisation
-        // and number rules look at the line.
+    }
+
+    /// The one place the Custom Dictionary and `TranscriptFormatter` run, on the
+    /// complete text of a decode. Dictionary first (it fixes *words*), then the
+    /// formatter (it fixes *text*) - so a correction like "m r t" -> "MRT" is in
+    /// place before capitalisation and number rules look at the line.
+    private func finalize(_ text: String) -> String {
         let corrected = customDictionary.apply(to: text)
-        return TranscriptFormatter.format(corrected, level: cleanupLevel())
+        return TranscriptFormatter.format(corrected, level: cleanupLevel(), profile: activeStyle)
     }
 }

@@ -35,6 +35,9 @@ final class WhisperService {
         let modelUsed: WhisperModelType
         let languageTag: LanguageType
         let languageComponents: [LanguageType]
+        /// Length-weighted mean token probability of the kept segments (0…1) -
+        /// what the UI shows as "low confidence" below `Constants.lowConfidence`.
+        let confidence: Float
     }
 
     /// One decoded segment's text plus its timing relative to the FULL
@@ -45,7 +48,12 @@ final class WhisperService {
         let text: String
         let startTime: TimeInterval
         let endTime: TimeInterval
+        let confidence: Float
     }
+
+    /// Confidence of the most recent public decode, length-weighted over the
+    /// segments that survived the hallucination filter. 1 when nothing decoded.
+    private var lastConfidence: Float = 1
 
     private(set) var loadedModels: Set<WhisperModelType> = []
 
@@ -191,7 +199,8 @@ final class WhisperService {
             text: text,
             modelUsed: model,
             languageTag: classification.languageTag,
-            languageComponents: classification.components
+            languageComponents: classification.components,
+            confidence: lastConfidence
         )
     }
 
@@ -277,7 +286,8 @@ final class WhisperService {
                 text: finalText,
                 modelUsed: classification.recommendedModel,
                 languageTag: classification.languageTag,
-                languageComponents: classification.components
+                languageComponents: classification.components,
+                confidence: lastConfidence
             )
         }
 
@@ -301,11 +311,13 @@ final class WhisperService {
         // whenever no whole-clip reroute happened. Caught by the style tests.)
         let finalText = finalize(finalSegments.map(\.text).joined(separator: " "))
         let finalClassification = classifier.classify(text: finalText)
+        lastConfidence = Self.weightedConfidence(finalSegments.map { ($0.text, $0.confidence) })
         return TranscriptionResult(
             text: finalText,
             modelUsed: effectiveDefaultModel,
             languageTag: finalClassification.languageTag,
-            languageComponents: finalClassification.components
+            languageComponents: finalClassification.components,
+            confidence: lastConfidence
         )
     }
 
@@ -370,8 +382,8 @@ final class WhisperService {
             }
 
             let slice = Array(fullSamples[startSample..<endSample])
-            if let replacementText = await rerouteIfNeeded(slice: slice, defaultEngine: defaultEngine, defaultModel: defaultModel) {
-                result.append(TimedSegment(text: replacementText, startTime: segment.startTime, endTime: segment.endTime))
+            if let replacement = await rerouteIfNeeded(slice: slice, defaultEngine: defaultEngine, defaultModel: defaultModel) {
+                result.append(TimedSegment(text: replacement.text, startTime: segment.startTime, endTime: segment.endTime, confidence: replacement.confidence))
             } else {
                 result.append(segment)
             }
@@ -387,7 +399,7 @@ final class WhisperService {
         slice: [Float],
         defaultEngine: WhisperTranscribing,
         defaultModel: WhisperModelType
-    ) async -> String? {
+    ) async -> (text: String, confidence: Float)? {
         // A language-ID probe, not a real decode attempt - languageHint: nil
         // is what makes whisper.cpp actually run its own detector instead of
         // trusting a forced hint. The probe's own transcription is discarded;
@@ -410,8 +422,9 @@ final class WhisperService {
               )
         else { return nil }
 
-        let text = rawJoined(segments)
-        return text.isEmpty ? nil : text
+        let kept = keptSegments(segments)
+        let text = rawJoined(kept)
+        return text.isEmpty ? nil : (text, Self.weightedConfidence(kept.map { ($0.text, $0.confidence) }))
     }
 
     /// Only Malay/Arabic have their own dedicated model in this app (see
@@ -464,26 +477,19 @@ final class WhisperService {
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> String {
         let chunkSize = Int(chunkDurationSeconds * Constants.sampleRate)
-        guard samples.count > chunkSize else {
-            let segments = try await engine.transcribe(
-                samples: samples,
-                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
-            )
-            return rawJoined(segments)
-        }
-
-        var pieces: [String] = []
+        var kept: [WhisperEngine.Segment] = []
         var start = 0
-        while start < samples.count {
+        repeat {
             let end = min(start + chunkSize, samples.count)
             let segments = try await engine.transcribe(
                 samples: Array(samples[start..<end]),
                 options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
             )
-            pieces.append(rawJoined(segments))
+            kept.append(contentsOf: keptSegments(segments))
             start = end
-        }
-        return pieces.joined(separator: " ")
+        } while start < samples.count
+        lastConfidence = Self.weightedConfidence(kept.map { ($0.text, $0.confidence) })
+        return rawJoined(kept)
     }
 
     /// Same chunking as `runChunkedUninstrumented`, but keeps each segment
@@ -526,11 +532,38 @@ final class WhisperService {
     }
 
     private func timedSegments(from segments: [WhisperEngine.Segment], chunkStartTime: TimeInterval) -> [TimedSegment] {
-        segments.compactMap { segment in
+        keptSegments(segments).compactMap { segment in
             let text = TranscriptSanitizer.stripAnnotationTags(segment.text)
             guard !text.isEmpty else { return nil }
-            return TimedSegment(text: text, startTime: chunkStartTime + segment.startTime, endTime: chunkStartTime + segment.endTime)
+            return TimedSegment(text: text, startTime: chunkStartTime + segment.startTime, endTime: chunkStartTime + segment.endTime, confidence: segment.confidence)
         }
+    }
+
+    /// The hallucination filter: drops segments `TranscriptSanitizer` recognises
+    /// as Whisper's silence phrases, using the decoder's own no-speech probability
+    /// and token confidence for the borderline ones. Every drop is logged so a
+    /// wrongly-dropped real phrase can be found in the debug log.
+    private func keptSegments(_ segments: [WhisperEngine.Segment]) -> [WhisperEngine.Segment] {
+        segments.filter { segment in
+            let text = TranscriptSanitizer.stripAnnotationTags(segment.text)
+            let drop = TranscriptSanitizer.isLikelyHallucination(text, noSpeechProbability: segment.noSpeechProbability, confidence: segment.confidence)
+            if drop {
+                DebugLogger.shared.log(
+                    "dropped hallucinated segment '\(text)' noSpeech=\(segment.noSpeechProbability) confidence=\(segment.confidence)",
+                    category: "whisper"
+                )
+            }
+            return !drop
+        }
+    }
+
+    /// Mean confidence weighted by text length, so one uncertain word does not
+    /// outweigh a confident sentence. 1 when there is no text.
+    static func weightedConfidence(_ parts: [(text: String, confidence: Float)]) -> Float {
+        let weighted = parts.map { (Float($0.text.count), $0.confidence) }.filter { $0.0 > 0 }
+        let total = weighted.reduce(0) { $0 + $1.0 }
+        guard total > 0 else { return 1 }
+        return weighted.reduce(0) { $0 + $1.0 * $1.1 } / total
     }
 
     /// Decoder output with whisper's annotation tags stripped and segments joined

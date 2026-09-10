@@ -16,6 +16,9 @@ final class Transcription {
     /// entry be re-run with another model, or retried after a failed decode.
     /// Optional so SwiftData migrates existing stores in place.
     var audioFileName: String?
+    /// Decoder confidence (mean token probability, 0…1) - nil for entries saved
+    /// before it existed. Optional so SwiftData migrates existing stores in place.
+    var confidence: Float?
 
     init(
         text: String,
@@ -23,7 +26,8 @@ final class Transcription {
         languageUsed: LanguageType,
         modelUsed: WhisperModelType,
         date: Date = Date(),
-        audioFileName: String? = nil
+        audioFileName: String? = nil,
+        confidence: Float? = nil
     ) {
         self.id = UUID()
         self.text = text
@@ -34,6 +38,13 @@ final class Transcription {
         self.isFavorite = false
         self.notes = nil
         self.audioFileName = audioFileName
+        self.confidence = confidence
+    }
+
+    /// The decoder was unsure of this one - worth a second look before sending.
+    var isLowConfidence: Bool {
+        guard let confidence else { return false }
+        return confidence < Constants.lowConfidence
     }
 
     var wordCount: Int {

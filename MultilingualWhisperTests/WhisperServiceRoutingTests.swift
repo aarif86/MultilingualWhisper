@@ -75,6 +75,54 @@ final class WhisperServiceRoutingTests: XCTestCase {
         XCTAssertNotNil(service.lastTimings, "a thrown decode still leaves a timing, so a failure's cost is visible too")
     }
 
+    // MARK: - Hallucination filter and confidence
+
+    func testHallucinatedSegmentsAreDroppedFromEveryPath() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "Thank you for watching.", startTime: 0, endTime: 0.4, noSpeechProbability: 0.9, confidence: 0.3),
+            WhisperEngine.Segment(text: "we go makan", startTime: 0.4, endTime: 0.8, noSpeechProbability: 0.05, confidence: 0.9),
+            WhisperEngine.Segment(text: "you", startTime: 0.8, endTime: 0.9, noSpeechProbability: 0.7, confidence: 0.2),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+
+        let routed = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(routed.text, "we go makan")
+        XCTAssertEqual(routed.confidence, 0.9, accuracy: 0.001)
+
+        let forced = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+        XCTAssertEqual(forced.text, "we go makan")
+        XCTAssertEqual(forced.confidence, 0.9, accuracy: 0.001)
+    }
+
+    func testConfidentThankYouIsKept() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "Thank you.", startTime: 0, endTime: 0.4, noSpeechProbability: 0.1, confidence: 0.95),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(result.text, "Thank you.")
+    }
+
+    func testConfidenceIsWeightedByTextLength() {
+        let confidence = WhisperService.weightedConfidence([("a long confident sentence", 1.0), ("hm", 0.0)])
+        XCTAssertEqual(confidence, 25.0 / 27.0, accuracy: 0.001)
+        XCTAssertEqual(WhisperService.weightedConfidence([]), 1)
+        XCTAssertEqual(WhisperService.weightedConfidence([("", 0.2)]), 1)
+    }
+
+    func testLowConfidenceResultIsFlaggedOnTheHistoryEntry() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "something mumbled", startTime: 0, endTime: 0.4, noSpeechProbability: 0.2, confidence: 0.3),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(result.confidence, 0.3, accuracy: 0.001)
+
+        let record = Transcription(text: result.text, duration: 1, languageUsed: .singlish, modelUsed: .singlish, confidence: result.confidence)
+        XCTAssertTrue(record.isLowConfidence)
+        XCTAssertFalse(Transcription(text: "x", duration: 1, languageUsed: .singlish, modelUsed: .singlish).isLowConfidence, "entries saved before confidence existed are never flagged")
+    }
+
     // MARK: - Dictionary and formatter reach every path
 
     /// Auto-Detect (the default) used to skip the dictionary and formatter

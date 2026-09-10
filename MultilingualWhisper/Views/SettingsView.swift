@@ -93,6 +93,16 @@ struct SettingsView: View {
 
                     Toggle("Auto-punctuation", isOn: $viewModel.autoPunctuation)
 
+                    Toggle("Skip silence before transcribing", isOn: $viewModel.skipSilence)
+                    Text("Finds the speech first (Silero VAD) and transcribes only that - faster, and stops the model inventing words for quiet stretches. Turn off if it trims a very soft voice.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Vocabulary hints (experimental)", isOn: $viewModel.vocabularyHints)
+                    Text("Shows the model your Custom Dictionary spellings before it listens, so names come out right the first time. Experimental: turn off if dictations start coming back empty.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     Picker("Cleanup", selection: $viewModel.cleanupLevel) {
                         ForEach(CleanupLevel.allCases) { level in
                             Text(level.rawValue).tag(level)

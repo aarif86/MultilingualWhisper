@@ -55,6 +55,18 @@ actor WhisperEngine {
         /// useful for individual symbols, not phrases - see TranscriptSanitizer for
         /// the phrase-level bag of hallucinations).
         var suppressRegex: String?
+
+        // Silero VAD (whisper.cpp's bundled implementation). With a model path set,
+        // whisper_full first runs the VAD over the audio and decodes only the
+        // speech segments, joined with 0.1 s of silence - the cheapest and most
+        // effective hallucination guard of all is not feeding the model silence
+        // (Superwhisper "Remove Silence"). Segment times are mapped back to the
+        // original timeline, so per-segment reprocessing keeps working. nil = off.
+        var vadModelPath: String?
+        var vadThreshold: Float = 0.5
+        var vadMinSpeechMs: Int32 = 250
+        var vadMinSilenceMs: Int32 = 100
+        var vadSpeechPadMs: Int32 = 30
     }
 
     struct Segment {
@@ -125,14 +137,27 @@ actor WhisperEngine {
         let languageCStr = options.languageHint.map { strdup($0) } ?? nil
         let promptCStr = options.initialPrompt.map { strdup($0) } ?? nil
         let suppressCStr = options.suppressRegex.map { strdup($0) } ?? nil
+        let vadPathCStr = options.vadModelPath.map { strdup($0) } ?? nil
         defer {
             free(languageCStr)
             free(promptCStr)
             free(suppressCStr)
+            free(vadPathCStr)
         }
         params.language = UnsafePointer(languageCStr)
         params.initial_prompt = UnsafePointer(promptCStr)
         params.suppress_regex = UnsafePointer(suppressCStr)
+
+        if let vadPathCStr {
+            params.vad = true
+            params.vad_model_path = UnsafePointer(vadPathCStr)
+            var vad = whisper_vad_default_params()
+            vad.threshold = options.vadThreshold
+            vad.min_speech_duration_ms = options.vadMinSpeechMs
+            vad.min_silence_duration_ms = options.vadMinSilenceMs
+            vad.speech_pad_ms = options.vadSpeechPadMs
+            params.vad_params = vad
+        }
 
         let status = samples.withUnsafeBufferPointer { buffer in
             whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))

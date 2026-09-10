@@ -108,6 +108,9 @@ enum ChatExportParser {
         "today", "tomorrow", "yesterday", "morning", "night", "day", "week", "month", "year",
         "baby", "mom", "mum", "dad", "check", "ask", "please", "free", "sorry", "coz",
         "plan", "think", "meeting", "send", "later", "thank", "confirm", "msg", "car",
+        "busy", "work", "home", "phone", "text", "talk", "tell", "sure", "maybe",
+        "wait", "done", "fine", "great", "sound", "sounds", "cool", "nice", "bit",
+        "little", "big", "long", "short", "thanks", "welcome", "problem",
     ]
 
     static func wordFrequency(_ messages: [ParsedMessage]) -> [(word: String, count: Int)] {

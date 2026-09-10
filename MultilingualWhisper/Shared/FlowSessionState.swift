@@ -36,6 +36,8 @@ enum FlowSessionState {
     private static let lastIdleTimeoutKey = "flow.lastIdleTimeoutAt"
     private static let requestedCommandModeKey = "flow.requestedCommandMode"
     private static let utteranceIsCommandKey = "flow.utteranceIsCommand"
+    private static let dictationStyleKey = "flow.dictationStyle"
+    private static let hostFieldHintKey = "flow.hostFieldHint"
 
     private static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: DictationHandoff.appGroupID)
@@ -110,6 +112,32 @@ enum FlowSessionState {
     static var utteranceIsCommand: Bool {
         get { sharedDefaults?.bool(forKey: utteranceIsCommandKey) ?? false }
         set { sharedDefaults?.set(newValue, forKey: utteranceIsCommandKey) }
+    }
+
+    // MARK: - Style (see DictationStyle)
+
+    /// The preset the user picked in the keyboard's style pill. A preference,
+    /// not session state: survives `clear()` and app relaunches.
+    static var dictationStyle: DictationStyle {
+        get { sharedDefaults?.string(forKey: dictationStyleKey).flatMap(DictationStyle.init(rawValue:)) ?? .auto }
+        set { sharedDefaults?.set(newValue.rawValue, forKey: dictationStyleKey) }
+    }
+
+    /// What the keyboard last learned about the field it is typing into, so the
+    /// app can resolve `auto` when it formats the next utterance.
+    static var hostFieldHint: HostFieldHint {
+        get { sharedDefaults?.string(forKey: hostFieldHintKey).flatMap(HostFieldHint.init(rawValue:)) ?? .general }
+        set { sharedDefaults?.set(newValue.rawValue, forKey: hostFieldHintKey) }
+    }
+
+    /// The preset an `auto` pick lands on right now, for the keyboard's pill.
+    static var resolvedStyle: DictationStyle {
+        DictationStyle.resolve(dictationStyle, hint: hostFieldHint)
+    }
+
+    /// The formatter switches for the next utterance.
+    static func resolvedStyleProfile() -> StyleProfile {
+        dictationStyle.profile(hint: hostFieldHint)
     }
 
     /// Called when a session ends (explicitly, or the app decides to time it

@@ -194,4 +194,68 @@ final class TranscriptFormatterTests: XCTestCase {
     func testFillerSurroundedByCommasLeavesOneComma() {
         XCTAssertEqual(light("nasar said , uh , we go"), "Nasar said, we go")
     }
+
+    // MARK: - Styles (DictationStyle profiles on top of a level)
+
+    private func styled(_ text: String, level: CleanupLevel = .light, _ style: DictationStyle, hint: HostFieldHint = .general) -> String {
+        TranscriptFormatter.format(text, level: level, profile: style.profile(hint: hint))
+    }
+
+    func testStandardProfileChangesNothingAtAnyLevel() {
+        let text = "  um, we go   tampines at three pm lah . "
+        XCTAssertEqual(styled(text, level: .raw, .notes), text)
+        XCTAssertEqual(styled(text, level: .light, .notes), light(text))
+        XCTAssertEqual(styled(text, level: .full, .auto), full(text))
+    }
+
+    func testChatDropsALoneTrailingFullStop() {
+        XCTAssertEqual(styled("um see you there.", .messaging), "See you there")
+        XCTAssertEqual(styled("see you there", .messaging), "See you there")
+    }
+
+    func testChatDropsTheStopAfterADecimalOrDomain() {
+        XCTAssertEqual(styled("see you at 3.5.", .messaging), "See you at 3.5")
+        XCTAssertEqual(styled("go to flow.nasar.sg.", .messaging), "Go to flow.nasar.sg")
+    }
+
+    func testChatKeepsQuestionsExclamationsEllipsesAndSecondSentences() {
+        XCTAssertEqual(styled("you coming?", .messaging), "You coming?")
+        XCTAssertEqual(styled("shiok!", .messaging), "Shiok!")
+        XCTAssertEqual(styled("wait ah...", .messaging), "Wait ah...")
+        XCTAssertEqual(styled("I'm here. come now.", .messaging), "I'm here. Come now.")
+    }
+
+    func testChatStillRespectsRawAtTheWordLevel() {
+        XCTAssertEqual(styled("um see you there.", level: .raw, .messaging), "um see you there")
+    }
+
+    func testEmailForcesDigitsCapitalsAndAClosingFullStop() {
+        XCTAssertEqual(styled("thanks see you at three pm", .email), "Thanks see you at 3pm.")
+        XCTAssertEqual(styled("thanks see you at three pm", level: .raw, .email), "Thanks see you at 3pm.")
+    }
+
+    func testEmailDoesNotDoubleUpOrCloseAfterAClosingQuote() {
+        XCTAssertEqual(styled("all good.", .email), "All good.")
+        XCTAssertEqual(styled("he said \u{201C}ok\u{201D}", .email), "He said \u{201C}ok\u{201D}.")
+        XCTAssertEqual(styled("done?", .email), "Done?")
+    }
+
+    func testExactInAnAddressFieldJoinsAnEmailAndDropsEverySpace() {
+        XCTAssertEqual(styled("aarif raziff at gmail dot com", .exact, hint: .address), "aarifraziff@gmail.com")
+        XCTAssertEqual(styled("flow dot nasar dot sg.", level: .raw, .auto, hint: .address), "flow.nasar.sg")
+    }
+
+    func testExactInACodeFieldKeepsSpacesButNoCapitalsOrTrailingStop() {
+        XCTAssertEqual(styled("um print hello world.", .auto, hint: .code), "print hello world")
+    }
+
+    func testSearchBoxGetsChatBehaviour() {
+        XCTAssertEqual(styled("best chicken rice tampines.", .auto, hint: .search), "Best chicken rice tampines")
+    }
+
+    func testArabicTrailingRules() {
+        XCTAssertEqual(styled("\u{0634}\u{0643}\u{0631}\u{0627}.", level: .raw, .messaging), "\u{0634}\u{0643}\u{0631}\u{0627}")
+        XCTAssertEqual(styled("\u{0634}\u{0643}\u{0631}\u{0627}", level: .raw, .email), "\u{0634}\u{0643}\u{0631}\u{0627}.")
+        XCTAssertEqual(styled("\u{0645}\u{0627}\u{0630}\u{0627}\u{061F}", level: .raw, .email), "\u{0645}\u{0627}\u{0630}\u{0627}\u{061F}")
+    }
 }

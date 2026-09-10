@@ -90,6 +90,13 @@ final class WhisperService {
     /// Tests pass `{ .raw }` so their exact-string expectations stay byte-for-byte.
     private let cleanupLevel: () -> CleanupLevel
 
+    /// The `DictationStyle` for the decode in progress - `.standard` (no effect)
+    /// unless a caller that knows the destination sets it, which today is only
+    /// `FlowSessionEngine` for keyboard dictations: in-app recordings have no host
+    /// field to style for. Set before a decode and reset after; decodes never
+    /// overlap because there is one microphone.
+    var activeStyle: StyleProfile = .standard
+
     /// Loads (or returns the already-loaded) engine for a model type. Safe to
     /// call repeatedly / concurrently - concurrent callers await the same
     /// in-flight load rather than loading the same 500MB file twice.
@@ -484,6 +491,6 @@ final class WhisperService {
         // so a correction like "m r t" -> "MRT" is in place before capitalisation
         // and number rules look at the line.
         let corrected = customDictionary.apply(to: text)
-        return TranscriptFormatter.format(corrected, level: cleanupLevel())
+        return TranscriptFormatter.format(corrected, level: cleanupLevel(), profile: activeStyle)
     }
 }

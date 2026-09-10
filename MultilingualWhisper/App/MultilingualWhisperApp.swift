@@ -9,6 +9,7 @@ struct MultilingualWhisperApp: App {
     @State private var modelDownloadService: ModelDownloadService
     @State private var whisperService: WhisperService
     @State private var customDictionaryService: CustomDictionaryService
+    @State private var userLanguageKeywords: UserLanguageKeywords
     @State private var flowSession: FlowSessionEngine
     @State private var quickDictateActive = false
     @State private var quickDictateSessionID = UUID()
@@ -28,9 +29,18 @@ struct MultilingualWhisperApp: App {
         // learnedStore: the keyboard queues spelling corrections it noticed (see
         // CorrectionLearner); the service pulls them in here and on foreground.
         let dictionaryService = CustomDictionaryService(learnedStore: .shared)
-        let whisper = WhisperService(modelStore: downloadService, customDictionary: dictionaryService)
+        // Seeded once, at launch - see UserLanguageKeywords's doc comment for
+        // why approving a new word from a chat import takes effect on the
+        // next launch rather than immediately.
+        let languageKeywords = UserLanguageKeywords()
+        let classifier = RuleBasedLanguageClassifier(
+            additionalMalayKeywords: languageKeywords.malay,
+            additionalSinglishMarkers: languageKeywords.singlish
+        )
+        let whisper = WhisperService(modelStore: downloadService, classifier: classifier, customDictionary: dictionaryService)
         _modelDownloadService = State(initialValue: downloadService)
         _customDictionaryService = State(initialValue: dictionaryService)
+        _userLanguageKeywords = State(initialValue: languageKeywords)
         _whisperService = State(initialValue: whisper)
         _flowSession = State(initialValue: FlowSessionEngine(whisperService: whisper, modelContainer: modelContainer))
     }

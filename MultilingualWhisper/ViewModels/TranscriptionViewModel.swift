@@ -212,7 +212,7 @@ final class TranscriptionViewModel {
                 lastDuration = duration
                 phase = .idle
 
-                saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
+                saveToHistory(text: finalText, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName, confidence: result.confidence)
                 if let timings = whisperService.lastTimings {
                     let stage = StageTimings(recordedAt: Date(), source: "app", capture: duration, decode: timings.decode, format: timings.format, handoff: nil)
                     LatencyLog.shared.record(stage)
@@ -225,9 +225,9 @@ final class TranscriptionViewModel {
         }
     }
 
-    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?) {
+    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?, confidence: Float) {
         guard !text.isEmpty, let context = activeModelContext else { return }
-        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName)
+        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName, confidence: confidence)
         context.insert(record)
         try? context.save()
     }

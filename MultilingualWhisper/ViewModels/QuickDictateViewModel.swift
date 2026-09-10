@@ -29,7 +29,7 @@ final class QuickDictateViewModel {
     func publishIfFinished() {
         guard !didPublish, transcription.phase == .idle, !transcription.transcript.isEmpty else { return }
         DictationHandoff.publish(transcription.transcript)
-        UIPasteboard.general.string = transcription.transcript
+        ClipboardFallback.place(transcription.transcript)
         didPublish = true
     }
 }

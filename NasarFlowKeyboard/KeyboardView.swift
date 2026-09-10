@@ -20,6 +20,20 @@ struct KeyboardView: View {
     }
 
     let hasFullAccess: Bool
+    /// Voice controls or the compact letter / symbol layer - see KeyboardTyping.
+    let layer: KeyboardTyping.Layer
+    /// Letter keys show and type capitals (one-shot shift, or the field's own
+    /// auto-capitalisation rule for this cursor position).
+    let shifted: Bool
+    /// What the undo row just removed, offered back once.
+    let undoneText: String?
+    let onToggleLetters: () -> Void
+    let onToggleSymbols: () -> Void
+    let onToggleShift: () -> Void
+    let onKey: (String) -> Void
+    let onBackspace: () -> Void
+    let onReturn: () -> Void
+    let onRedo: () -> Void
     let lastInsertedText: String?
     /// A spelling fix the user made by hand to the last insert, offered for the
     /// Custom Dictionary - see CorrectionLearner.
@@ -47,7 +61,9 @@ struct KeyboardView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if !hasFullAccess {
+            if layer != .voice {
+                typingLayer
+            } else if !hasFullAccess {
                 fullAccessNeeded
             } else {
                 // A finished dictation is inserted the instant it's ready
@@ -62,9 +78,15 @@ struct KeyboardView: View {
                     learnRow(suggestedCorrection)
                 } else if let lastInsertedText {
                     undoInsertRow(lastInsertedText)
+                } else if let undoneText {
+                    redoRow(undoneText)
                 }
-                if case .inactive = flowState {} else {
-                    stylePill
+                HStack {
+                    if case .inactive = flowState {} else {
+                        stylePill
+                    }
+                    Spacer(minLength: 0)
+                    lettersToggle
                 }
                 flowControl
             }
@@ -94,24 +116,133 @@ struct KeyboardView: View {
     /// Email / Notes / Exact, and Auto shows what it has settled on for this
     /// field so a wrong guess is visible before, not after, the dictation.
     private var stylePill: some View {
-        HStack {
-            Button {
-                onCycleStyle()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: resolvedStyle.symbolName)
-                    Text(style == .auto ? "Auto \u{00B7} \(resolvedStyle.displayName)" : style.displayName)
-                }
-                .font(.caption)
+        Button {
+            onCycleStyle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: resolvedStyle.symbolName)
+                Text(style == .auto ? "Auto \u{00B7} \(resolvedStyle.displayName)" : style.displayName)
+            }
+            .font(.caption)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.thinMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Style: \(style == .auto ? "Auto, \(resolvedStyle.displayName)" : style.displayName)")
+        .accessibilityHint("Tap to change how dictation is formatted")
+    }
+
+    /// Into the letter layer - fix a word without leaving this keyboard.
+    private var lettersToggle: some View {
+        Button {
+            onToggleLetters()
+        } label: {
+            Text("ABC")
+                .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(.thinMaterial, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Style: \(style == .auto ? "Auto, \(resolvedStyle.displayName)" : style.displayName)")
-            .accessibilityHint("Tap to change how dictation is formatted")
-            Spacer(minLength: 0)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Type with letter keys")
+    }
+
+    // MARK: - Letter / symbol layer (KeyboardTyping)
+
+    private var typingLayer: some View {
+        VStack(spacing: 6) {
+            let rows = layer == .symbols ? KeyboardTyping.symbolRows : KeyboardTyping.letterRows
+            keyRow(rows[0])
+            keyRow(rows[1]).padding(.horizontal, 16)
+            HStack(spacing: 4) {
+                if layer == .letters {
+                    specialKey(systemImage: shifted ? "shift.fill" : "shift", label: "Shift", action: onToggleShift)
+                        .frame(width: 42)
+                } else {
+                    specialKey(text: "ABC", label: "Letters", action: onToggleSymbols)
+                        .frame(width: 42)
+                }
+                keyRow(rows[2])
+                specialKey(systemImage: "delete.left", label: "Delete", action: onBackspace)
+                    .frame(width: 42)
+            }
+            HStack(spacing: 4) {
+                specialKey(text: layer == .symbols ? "ABC" : "123", label: layer == .symbols ? "Letters" : "Numbers", action: onToggleSymbols)
+                    .frame(width: 46)
+                key(",", insert: ",")
+                    .frame(width: 34)
+                specialKey(text: "space", label: "Space") { onKey(" ") }
+                key(".", insert: ".")
+                    .frame(width: 34)
+                specialKey(systemImage: "return", label: "Return", action: onReturn)
+                    .frame(width: 46)
+                specialKey(systemImage: "mic.fill", label: "Back to dictation", action: onToggleLetters)
+                    .frame(width: 42)
+            }
+        }
+    }
+
+    private func keyRow(_ keys: [String]) -> some View {
+        HStack(spacing: 4) {
+            ForEach(keys, id: \.self) { key in
+                self.key(shifted && layer == .letters ? key.uppercased() : key, insert: key)
+            }
+        }
+    }
+
+    private func key(_ title: String, insert: String) -> some View {
+        Button {
+            onKey(insert)
+        } label: {
+            Text(title)
+                .font(.system(size: 20))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func specialKey(text: String? = nil, systemImage: String? = nil, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                } else {
+                    Text(text ?? "")
+                }
+            }
+            .font(.system(size: 15))
+            .frame(maxWidth: .infinity)
+            .frame(height: 38)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// The other half of undo: what was just removed can come straight back.
+    private func redoRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.uturn.forward")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Removed")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(text)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            Spacer(minLength: 0)
+            Button("Put back") { onRedo() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
     // Two prior UIKit-level attempts (extensionContext.open, then walking the
@@ -353,6 +484,7 @@ struct KeyboardView: View {
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
+            lettersToggle
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -361,6 +493,16 @@ struct KeyboardView: View {
 #Preview("Inactive") {
     KeyboardView(
         hasFullAccess: true,
+        layer: .voice,
+        shifted: false,
+        undoneText: nil,
+        onToggleLetters: {},
+        onToggleSymbols: {},
+        onToggleShift: {},
+        onKey: { _ in },
+        onBackspace: {},
+        onReturn: {},
+        onRedo: {},
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
@@ -385,6 +527,16 @@ struct KeyboardView: View {
 #Preview("Listening") {
     KeyboardView(
         hasFullAccess: true,
+        layer: .voice,
+        shifted: false,
+        undoneText: nil,
+        onToggleLetters: {},
+        onToggleSymbols: {},
+        onToggleShift: {},
+        onKey: { _ in },
+        onBackspace: {},
+        onReturn: {},
+        onRedo: {},
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
@@ -409,6 +561,16 @@ struct KeyboardView: View {
 #Preview("After insert") {
     KeyboardView(
         hasFullAccess: true,
+        layer: .voice,
+        shifted: false,
+        undoneText: nil,
+        onToggleLetters: {},
+        onToggleSymbols: {},
+        onToggleShift: {},
+        onKey: { _ in },
+        onBackspace: {},
+        onReturn: {},
+        onRedo: {},
         lastInsertedText: "Bismillah, let's go makan lah",
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
@@ -416,6 +578,40 @@ struct KeyboardView: View {
         flowState: .readyToListen,
         style: .auto,
         resolvedStyle: .messaging,
+        onCycleStyle: {},
+        onStartListening: {},
+        onStartCommand: {},
+        onInsertUnrecognized: {},
+        onDismissUnrecognized: {},
+        onDismissNotice: {},
+        onStopListening: {},
+        onUndoInsert: {},
+        onLearnCorrection: {},
+        onDismissCorrection: {}
+    )
+    .frame(height: 216)
+}
+
+#Preview("Letters") {
+    KeyboardView(
+        hasFullAccess: true,
+        layer: .letters,
+        shifted: true,
+        undoneText: nil,
+        onToggleLetters: {},
+        onToggleSymbols: {},
+        onToggleShift: {},
+        onKey: { _ in },
+        onBackspace: {},
+        onReturn: {},
+        onRedo: {},
+        lastInsertedText: nil,
+        suggestedCorrection: nil,
+        unrecognizedCommand: nil,
+        commandNotice: nil,
+        flowState: .readyToListen,
+        style: .auto,
+        resolvedStyle: .notes,
         onCycleStyle: {},
         onStartListening: {},
         onStartCommand: {},

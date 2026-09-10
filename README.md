@@ -83,9 +83,13 @@ afterward, rather than hopping to the main app for every single utterance:
 3. The keyboard now shows a **mic button** directly - tap to speak, tap
    again to stop. Each dictation is sent to the already-running background
    session via Darwin notifications and transcribed through the exact same
-   pipeline as the main app, with the result copied to your clipboard and
-   dropped into a shared App Group container for the keyboard's **Insert**
-   button to pick up
+   pipeline as the main app, then dropped into a shared App Group container
+   and typed in by the keyboard the moment it appears (one tap removes it,
+   one more puts it back). It is also placed on the clipboard as a fallback -
+   local-only and **expiring after two minutes**, so a dictation never sits
+   there for days. **ABC** switches to a compact letter/number layer for
+   fixing a word without leaving the keyboard; the mic key brings dictation
+   back
 4. Turn **Flow** off again (Settings, or programmatically) when you're done -
    the background engine keeps the microphone active the whole time it's on,
    so this isn't meant to be left on indefinitely

@@ -89,7 +89,7 @@ struct QuickDictateView: View {
             VStack(spacing: 4) {
                 Text("Saved and ready to insert")
                     .font(.subheadline.weight(.medium))
-                Text("No need to tap Done first - switch back to where you were typing (app switcher works fine), then tap the ready text on your Nasar Flow keyboard to insert it.")
+                Text("No need to tap Done first - switch back to where you were typing (app switcher works fine) and the Nasar Flow keyboard types it in as soon as it appears. It's also on your clipboard for the next \(Int(ClipboardFallback.lifetime / 60)) minutes, in case you want to paste it somewhere else.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

@@ -12,7 +12,7 @@ import AppIntents
 struct DictateIntent: AppIntent {
     static var title: LocalizedStringResource = "Dictate"
     static var description = IntentDescription(
-        "Opens Nasar Flow and starts listening straight away. The transcript is copied to your clipboard and ready for the keyboard's Insert button."
+        "Opens Nasar Flow and starts listening straight away. The Nasar Flow keyboard types the transcript in when you switch back; it's also on your clipboard for two minutes."
     )
     static var openAppWhenRun: Bool = true
 

@@ -315,7 +315,7 @@ final class FlowSessionEngine {
                 return
             }
             DictationHandoff.publish(result.text)
-            UIPasteboard.general.string = result.text
+            ClipboardFallback.place(result.text)
             saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
             DarwinNotification.post(FlowSessionState.stateChanged)
             DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")

@@ -47,6 +47,14 @@ final class KeyboardViewController: UIInputViewController {
     /// "change tea to tee" with no "tea" before the cursor.
     private var commandNotice: String?
     private var flowPhase: FlowPhase = .idle
+    /// Voice controls, or the compact letter / symbol layer for fixing a word
+    /// without switching keyboards (see KeyboardTyping).
+    private var layer: KeyboardTyping.Layer = .voice
+    /// One-shot shift for the letter layer; cleared by the next key.
+    private var shiftOn = false
+    /// What the undo row just removed, offered back once - the "no, it was right"
+    /// half of undo. Cleared by any other edit.
+    private var undoneText: String?
     private var tickTimer: Timer?
     private var phaseTimeoutTimer: Timer?
     private var stateChangedObserver: DarwinNotification.Observer?
@@ -188,6 +196,20 @@ final class KeyboardViewController: UIInputViewController {
     private func makeView() -> KeyboardView {
         KeyboardView(
             hasFullAccess: hasFullAccess,
+            layer: layer,
+            shifted: layer == .letters && KeyboardTyping.shouldCapitalise(
+                shiftOn: shiftOn,
+                contextBefore: textDocumentProxy.documentContextBeforeInput,
+                autocapitalization: textDocumentProxy.autocapitalizationType ?? .sentences
+            ),
+            undoneText: undoneText,
+            onToggleLetters: { [weak self] in self?.toggleLetters() },
+            onToggleSymbols: { [weak self] in self?.toggleSymbols() },
+            onToggleShift: { [weak self] in self?.toggleShift() },
+            onKey: { [weak self] key in self?.typeKey(key) },
+            onBackspace: { [weak self] in self?.backspace() },
+            onReturn: { [weak self] in self?.typeReturn() },
+            onRedo: { [weak self] in self?.redoLastInsert() },
             lastInsertedText: lastInsertedText,
             suggestedCorrection: suggestedCorrection,
             unrecognizedCommand: unrecognizedCommandText,
@@ -398,6 +420,54 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
+    // MARK: - Letter layer (KeyboardTyping)
+
+    private func toggleLetters() {
+        layer = layer == .voice ? .letters : .voice
+        shiftOn = false
+        refresh()
+    }
+
+    private func toggleSymbols() {
+        layer = layer == .symbols ? .letters : .symbols
+        refresh()
+    }
+
+    private func toggleShift() {
+        shiftOn.toggle()
+        refresh()
+    }
+
+    /// Every typed character is a hand edit of whatever was dictated: the undo
+    /// row would now delete the wrong characters, so it goes away (the learner
+    /// still sees the original insert through LearnedCorrectionsStore).
+    private func typeKey(_ key: String) {
+        let capitalise = layer == .letters && KeyboardTyping.shouldCapitalise(
+            shiftOn: shiftOn,
+            contextBefore: textDocumentProxy.documentContextBeforeInput,
+            autocapitalization: textDocumentProxy.autocapitalizationType ?? .sentences
+        )
+        textDocumentProxy.insertText(capitalise ? key.uppercased() : key)
+        shiftOn = false
+        handEdited()
+    }
+
+    private func backspace() {
+        textDocumentProxy.deleteBackward()
+        handEdited()
+    }
+
+    private func typeReturn() {
+        textDocumentProxy.insertText("\n")
+        handEdited()
+    }
+
+    private func handEdited() {
+        lastInsertedText = nil
+        undoneText = nil
+        refresh()
+    }
+
     // MARK: - Insert / undo
 
     // Deliberately does NOT call advanceToNextInputMode() here - an earlier
@@ -424,7 +494,22 @@ final class KeyboardViewController: UIInputViewController {
         lastCheckedContext = nil
         unrecognizedCommandText = nil
         commandNotice = nil
+        undoneText = nil
         DictationHandoff.clearPending()
+        refresh()
+    }
+
+    /// Puts back exactly what undo removed - same string, so spacing and case
+    /// are as they were.
+    private func redoLastInsert() {
+        guard let text = undoneText else { return }
+        textDocumentProxy.insertText(text)
+        lastInsertedText = text
+        learnedStore.rememberInsert(text)
+        undoneText = nil
+        suggestedCorrection = nil
+        suggestionDismissed = false
+        lastCheckedContext = nil
         refresh()
     }
 
@@ -436,6 +521,7 @@ final class KeyboardViewController: UIInputViewController {
         guard let text = lastInsertedText else { return }
         text.forEach { _ in textDocumentProxy.deleteBackward() }
         lastInsertedText = nil
+        undoneText = text
         learnedStore.forgetInsert()
         suggestedCorrection = nil
         suggestionDismissed = true

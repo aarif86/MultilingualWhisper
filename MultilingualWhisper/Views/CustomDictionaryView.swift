@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct CustomDictionaryView: View {
     let dictionaryService: CustomDictionaryService
+    let languageKeywords: UserLanguageKeywords
 
     @State private var editorMode: DictionaryEditorMode?
     @State private var showingPasteSheet = false
@@ -31,6 +32,13 @@ struct CustomDictionaryView: View {
         }
         .navigationTitle("Custom Dictionary")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    LanguageKeywordsView(languageKeywords: languageKeywords)
+                } label: {
+                    Label("Language Words", systemImage: "text.bubble")
+                }
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Button {

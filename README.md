@@ -211,8 +211,39 @@ keyboard with the "why Full Access" line. Skippable at every step, never shown
 twice, skipped entirely for installs that already have a model. Settings →
 "Show the Welcome Screens Again" brings it back. Every intent
 opens the app because iOS only lets a foreground app start the microphone.
-Control Center controls and Lock Screen widgets need a widget extension (a
-second bundle ID and provisioning profile), so they are not included yet.
+
+## Live Activity, Lock Screen widget, Control Center
+
+`NasarFlowWidgets` is a third target (`com.multilingualwhisper.app.widgets`,
+a WidgetKit extension) with three entry points:
+
+- **"Flow is on" Live Activity** (`FlowLiveActivity`): while a Flow session
+  keeps the microphone open, the Dynamic Island shows a waveform (red while an
+  utterance is being captured) and the Lock Screen banner shows a live timer
+  and an **Off** button. The button is a `LiveActivityIntent`, which runs in
+  the app's own process and rings the `endSession` Darwin bell the engine
+  listens for. Started by `FlowSessionEngine.activate`, ended by `end()`
+  (including the idle timeout) - the playbook's single most important trust
+  affordance for a background mic (§3.1).
+- **Dictate widget** (`DictateWidget`): Lock Screen circular/rectangular and
+  Home Screen small; tapping opens Quick Dictate via `nasarflow://dictate`.
+- **Control Center controls** (iOS 18, `FlowControls.swift`): "Dictate" and
+  "Turn On Flow" buttons that open the app on the matching URL.
+
+### Extra setup this needs
+
+Same shape as the keyboard's: a third App ID and profile.
+
+1. **Register a new App ID**: `com.multilingualwhisper.app.widgets`
+2. **Enable "App Groups"** on it and attach `group.com.multilingualwhisper.app`
+3. **Create a profile**: App Store distribution → that App ID → the same
+   Apple Distribution certificate → name it exactly **`Nasar Flow Widgets`**
+4. **Add the GitHub secret** `APPLE_WIDGETS_PROVISIONING_PROFILE_BASE64`
+   (`base64 -i NasarFlowWidgets.mobileprovision | pbcopy`). `release.yml`
+   fails early with a clear message until it exists.
+
+Live Activities also need the user's permission once (Settings → Nasar Flow →
+Live Activities), which iOS grants by default.
 
 ## Requirements
 
@@ -334,6 +365,7 @@ below), two more are needed:
 |---|---|
 | `APPLE_PROVISIONING_PROFILE_BASE64` | **Re-generate and replace this one** - the main app's App ID now needs the App Groups capability, so its existing profile is stale until re-downloaded |
 | `APPLE_KEYBOARD_PROVISIONING_PROFILE_BASE64` | A *second*, separate profile for the `com.multilingualwhisper.app.keyboard` App ID |
+| `APPLE_WIDGETS_PROVISIONING_PROFILE_BASE64` | A *third* profile for the `com.multilingualwhisper.app.widgets` App ID (see [Live Activity](#live-activity-lock-screen-widget-control-center)) |
 
 `release.yml` has successfully archived, signed, exported, and uploaded a build
 to TestFlight from this exact codebase (as of 2026-09-06) - it follows Apple's

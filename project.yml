@@ -49,6 +49,9 @@ targets:
         # running, vs merely "active", to actually keep the app alive).
         UIBackgroundModes:
           - audio
+        # The "Flow is on" Live Activity (FlowLiveActivity) - drawn by the
+        # NasarFlowWidgets extension, started/ended by FlowSessionEngine.
+        NSSupportsLiveActivities: true
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
         # Both reference build settings rather than hardcoding values, so
@@ -124,6 +127,10 @@ targets:
       # APPLE_KEYBOARD_PROVISIONING_PROFILE_BASE64 secret is set.
       - target: NasarFlowKeyboard
         embed: true
+      # Live Activity, Lock Screen widget and Control Center controls - a third
+      # bundle ID, App ID and profile ("Nasar Flow Widgets"); see README.
+      - target: NasarFlowWidgets
+        embed: true
       - package: ZIPFoundation
     scheme:
       testTargets:
@@ -164,6 +171,34 @@ targets:
         # Same reasoning as the main target - see the comment on its
         # PROVISIONING_PROFILE_SPECIFIER above.
         PROVISIONING_PROFILE_SPECIFIER: "Nasar Flow Keyboard"
+
+  NasarFlowWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: NasarFlowWidgets
+      - path: MultilingualWhisper/Shared
+    info:
+      path: Generated/NasarFlowWidgets.Info.plist
+      properties:
+        CFBundleDisplayName: "Nasar Flow"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Generated/NasarFlowWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.multilingualwhisper.app
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.multilingualwhisper.app.widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # Same reasoning as the main target - see the comment on its
+        # PROVISIONING_PROFILE_SPECIFIER above.
+        PROVISIONING_PROFILE_SPECIFIER: "Nasar Flow Widgets"
 
   MultilingualWhisperTests:
     type: bundle.unit-test

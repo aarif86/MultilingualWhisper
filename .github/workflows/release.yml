@@ -68,12 +68,13 @@ jobs:
       # single global -PROVISIONING_PROFILE_SPECIFIER override on the archive
       # command would incorrectly apply to both targets, so each target names
       # its own profile in project.yml instead - see the comment there.
-      - name: Import signing certificate and both provisioning profiles
+      - name: Import signing certificate and all three provisioning profiles
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
           APP_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
           KEYBOARD_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_KEYBOARD_PROVISIONING_PROFILE_BASE64 }}
+          WIDGETS_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_WIDGETS_PROVISIONING_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
@@ -92,6 +93,11 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo -n "$APP_PROVISION_PROFILE_BASE64" | base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
           echo -n "$KEYBOARD_PROVISION_PROFILE_BASE64" | base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/keyboard.mobileprovision
+          if [ -z "$WIDGETS_PROVISION_PROFILE_BASE64" ]; then
+            echo "::error::APPLE_WIDGETS_PROVISIONING_PROFILE_BASE64 is not set - the NasarFlowWidgets extension needs its own App ID and profile ('Nasar Flow Widgets'), see README."
+            exit 1
+          fi
+          echo -n "$WIDGETS_PROVISION_PROFILE_BASE64" | base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/widgets.mobileprovision
 
       - name: Fill in exportOptions.plist
         env:

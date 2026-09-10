@@ -25,6 +25,9 @@ enum FlowSessionState {
     /// so the keyboard can refresh immediately instead of waiting for the
     /// next incidental UIInputViewController lifecycle callback.
     static let stateChanged = "com.multilingualwhisper.app.flow.stateChanged"
+    /// Posted by the Live Activity's Off button (`StopFlowLiveActivityIntent`,
+    /// which runs inside the app process) - the engine ends the session.
+    static let endSession = "com.multilingualwhisper.app.flow.endSession"
 
     // MARK: - Persisted state
 

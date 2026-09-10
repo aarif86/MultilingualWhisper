@@ -14,6 +14,8 @@
 		<string>Nasar Flow</string>
 		<key>com.multilingualwhisper.app.keyboard</key>
 		<string>Nasar Flow Keyboard</string>
+		<key>com.multilingualwhisper.app.widgets</key>
+		<string>Nasar Flow Widgets</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

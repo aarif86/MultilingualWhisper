@@ -1,4 +1,5 @@
 import Accelerate
+import ActivityKit
 import AVFoundation
 import Observation
 import SwiftData
@@ -55,6 +56,9 @@ final class FlowSessionEngine {
     private var sampleContinuation: AsyncStream<[Float]>.Continuation?
     private var startObserver: DarwinNotification.Observer?
     private var stopObserver: DarwinNotification.Observer?
+    private var endObserver: DarwinNotification.Observer?
+    /// The "Flow is on" Live Activity (FlowLiveActivity) for this session.
+    private var liveActivity: Activity<FlowActivityAttributes>?
     private var idleTimer: Timer?
     /// See `checkIdle` - injectable so tests don't wait half an hour.
     private let idleTimeout: TimeInterval
@@ -91,6 +95,12 @@ final class FlowSessionEngine {
         }
         stopObserver = DarwinNotification.observe(FlowSessionState.stopUtterance) { [weak self] in
             Task { @MainActor in self?.handleStopSignal() }
+        }
+        endObserver = DarwinNotification.observe(FlowSessionState.endSession) { [weak self] in
+            Task { @MainActor in
+                DebugLogger.shared.log("FlowSession end requested from the Live Activity", category: "flow")
+                self?.end()
+            }
         }
 
         // The app can be relaunched by the system independently of any
@@ -137,6 +147,7 @@ final class FlowSessionEngine {
         FlowSessionState.isActive = true
         touchIdleDeadline()
         armIdleTimer()
+        startLiveActivity()
         DebugLogger.shared.log("FlowSession activated - engine running continuously", category: "flow")
         // Start capturing the very first utterance immediately, rather than
         // waiting for a separate keyboard tap on top of Start Flow + swiping
@@ -169,9 +180,38 @@ final class FlowSessionEngine {
         idleTimer = nil
         stopEngine()
         isActive = false
+        endLiveActivity()
         FlowSessionState.clear()
         DarwinNotification.post(FlowSessionState.stateChanged)
         DebugLogger.shared.log("FlowSession ended", category: "flow")
+    }
+
+    // MARK: - Live Activity ("Flow is on" in the Dynamic Island / Lock Screen)
+
+    /// Started with the session and ended with it, so the open microphone is
+    /// always visible at the top of the screen with a one-tap Off. Every call is
+    /// a no-op when Live Activities are unavailable (Settings, Simulator, tests).
+    private func startLiveActivity() {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        let now = Date()
+        let content = ActivityContent(state: FlowActivityAttributes.ContentState(isRecording: false, since: now), staleDate: nil)
+        do {
+            liveActivity = try Activity.request(attributes: FlowActivityAttributes(startedAt: now), content: content, pushType: nil)
+        } catch {
+            DebugLogger.shared.log("Live Activity request failed: \(error)", category: "flow")
+        }
+    }
+
+    private func updateLiveActivity(isRecording: Bool) {
+        guard let liveActivity else { return }
+        let content = ActivityContent(state: FlowActivityAttributes.ContentState(isRecording: isRecording, since: Date()), staleDate: nil)
+        Task { await liveActivity.update(content) }
+    }
+
+    private func endLiveActivity() {
+        guard let liveActivity else { return }
+        self.liveActivity = nil
+        Task { await liveActivity.end(nil, dismissalPolicy: .immediate) }
     }
 
     // MARK: - Idle timeout
@@ -217,6 +257,7 @@ final class FlowSessionEngine {
         FlowSessionState.isRecording = true
         FlowSessionState.utteranceStartedAt = utteranceStartDate
         DarwinNotification.post(FlowSessionState.stateChanged)
+        updateLiveActivity(isRecording: true)
     }
 
     private func handleStopSignal() {
@@ -241,6 +282,7 @@ final class FlowSessionEngine {
         FlowSessionState.isRecording = false
         FlowSessionState.utteranceStartedAt = nil
         touchIdleDeadline()
+        updateLiveActivity(isRecording: false)
         guard publish else {
             DarwinNotification.post(FlowSessionState.stateChanged)
             return

@@ -75,6 +75,43 @@ final class CommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.capitaliseThat, before: "قال مرحبا"), [])
     }
 
+    // MARK: - Change X to Y
+
+    func testReplaceRewritesTheLastOccurrenceAndRetypesTheTail() {
+        XCTAssertEqual(
+            plan(.replace(target: "tea", replacement: "tee"), before: "I had tea and then tea again"),
+            [.deleteBackward(9), .insertRaw("tee again")]
+        )
+        XCTAssertEqual(plan(.replace(target: "tea", replacement: "tee"), before: "some tea"), [.deleteBackward(3), .insertRaw("tee")])
+    }
+
+    func testReplaceMatchesWholeWordsOnly() {
+        XCTAssertEqual(plan(.replace(target: "tea", replacement: "tee"), before: "teacher"), [])
+        XCTAssertEqual(plan(.replace(target: "tea", replacement: "tee"), before: "steam tea."), [.deleteBackward(4), .insertRaw("tee.")])
+    }
+
+    func testReplaceCopiesTheTargetsCase() {
+        XCTAssertEqual(plan(.replace(target: "tampines", replacement: "tampines"), before: "go to Tampines now"), [.deleteBackward(12), .insertRaw("Tampines now")])
+        XCTAssertEqual(plan(.replace(target: "ali", replacement: "aly"), before: "Ali said"), [.deleteBackward(8), .insertRaw("Aly said")])
+        XCTAssertEqual(plan(.replace(target: "mrt", replacement: "lrt"), before: "take the MRT"), [.deleteBackward(3), .insertRaw("LRT")])
+        XCTAssertEqual(plan(.replace(target: "lrt", replacement: "MRT"), before: "take the lrt"), [.deleteBackward(3), .insertRaw("MRT")])
+    }
+
+    func testReplaceMultiWordTargetAndNotFound() {
+        XCTAssertEqual(plan(.replace(target: "we go", replacement: "we went"), before: "yesterday we go makan"), [.deleteBackward(11), .insertRaw("we went makan")])
+        XCTAssertEqual(plan(.replace(target: "kopi", replacement: "teh"), before: "we go makan"), [])
+        XCTAssertEqual(plan(.replace(target: "kopi", replacement: "teh"), before: ""), [])
+    }
+
+    func testReplaceIsCaseAndDiacriticInsensitiveOnTheTarget() {
+        XCTAssertEqual(plan(.replace(target: "Tea", replacement: "tee"), before: "a TEA"), [.deleteBackward(3), .insertRaw("TEE")])
+        XCTAssertEqual(plan(.replace(target: "cafe", replacement: "kopitiam"), before: "the caf\u{00E9}"), [.deleteBackward(4), .insertRaw("kopitiam")])
+    }
+
+    func testSpellGoesThroughTheDictationPath() {
+        XCTAssertEqual(plan(.spell("Aly"), before: "hi"), [.insertDictation("Aly")])
+    }
+
     // MARK: - Literal
 
     func testLiteralGoesThroughTheDictationPath() {

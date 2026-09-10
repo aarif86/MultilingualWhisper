@@ -98,13 +98,38 @@ final class WhisperService {
         classifier: LanguageClassifying = RuleBasedLanguageClassifier(),
         customDictionary: CustomDictionaryService,
         cleanupLevel: @escaping () -> CleanupLevel = { AppSettings.shared.cleanupLevel },
+        skipSilence: @escaping () -> Bool = { AppSettings.shared.skipSilence },
+        vocabularyHints: @escaping () -> Bool = { AppSettings.shared.vocabularyHints },
+        vadModelPath: String? = Bundle.main.url(forResource: "ggml-silero-v5.1.2", withExtension: "bin")?.path,
         makeEngine: @escaping @Sendable (String) throws -> WhisperTranscribing = { try WhisperEngine(modelPath: $0) }
     ) {
         self.modelStore = modelStore
         self.classifier = classifier
         self.customDictionary = customDictionary
         self.cleanupLevel = cleanupLevel
+        self.skipSilence = skipSilence
+        self.vocabularyHints = vocabularyHints
+        self.vadModelPath = vadModelPath
         self.makeEngine = makeEngine
+    }
+
+    /// Settings read at each decode - see `AppSettings.skipSilence` / `.vocabularyHints`.
+    private let skipSilence: () -> Bool
+    private let vocabularyHints: () -> Bool
+    /// The bundled Silero VAD model; nil turns the VAD off for every decode.
+    private let vadModelPath: String?
+
+    /// One place every decode's options are assembled: the model's language hint,
+    /// the glossary prompt when vocabulary hints are on, and the VAD when skipping
+    /// silence is on. Language-ID probes pass `vad: false` - their slices are
+    /// already speech, and an all-filtered probe would leave a stale language ID.
+    private func decodeOptions(languageHint: String?, model: WhisperModelType, vad: Bool = true) -> WhisperEngine.TranscriptionOptions {
+        var options = WhisperEngine.TranscriptionOptions(languageHint: languageHint)
+        options.initialPrompt = vocabularyHints() ? (GlossaryPrompt.build(from: customDictionary.entries) ?? model.initialPrompt) : model.initialPrompt
+        if vad, skipSilence(), let vadModelPath {
+            options.vadModelPath = vadModelPath
+        }
+        return options
     }
 
     /// Read at each decode so a Settings change applies to the very next utterance.
@@ -190,8 +215,7 @@ final class WhisperService {
         let text = finalize(try await runChunked(
             samples: samples,
             engine: engine,
-            languageHint: model.languageHint,
-            initialPrompt: model.initialPrompt,
+            model: model,
             chunkDurationSeconds: chunkDurationSeconds
         ))
         let classification = classifier.classify(text: text)
@@ -248,8 +272,7 @@ final class WhisperService {
         let draftSegments = try await runChunkedWithSegments(
             samples: samples,
             engine: firstEngine,
-            languageHint: effectiveDefaultModel.languageHint,
-            initialPrompt: effectiveDefaultModel.initialPrompt,
+            model: effectiveDefaultModel,
             chunkDurationSeconds: chunkDurationSeconds
         )
         let draftText = draftSegments.map(\.text).joined(separator: " ")
@@ -278,8 +301,7 @@ final class WhisperService {
             let finalText = finalize(try await runChunked(
                 samples: samples,
                 engine: betterEngine,
-                languageHint: classification.recommendedModel.languageHint,
-                initialPrompt: classification.recommendedModel.initialPrompt,
+                model: classification.recommendedModel,
                 chunkDurationSeconds: chunkDurationSeconds
             ))
             return TranscriptionResult(
@@ -408,7 +430,7 @@ final class WhisperService {
         // through WhisperEngine - reusing the full transcribe path costs one
         // extra decode per segment, accepted for now, worth revisiting if
         // this needs to get faster.)
-        guard (try? await defaultEngine.transcribe(samples: slice, options: .init(languageHint: nil))) != nil else { return nil }
+        guard (try? await defaultEngine.transcribe(samples: slice, options: decodeOptions(languageHint: nil, model: defaultModel, vad: false))) != nil else { return nil }
         guard let detectedCode = await defaultEngine.detectedLanguageCode(),
               let recommendedModel = Self.model(forDetectedLanguageCode: detectedCode),
               recommendedModel != defaultModel,
@@ -418,7 +440,7 @@ final class WhisperService {
         guard let engine = try? await loadEngine(for: recommendedModel),
               let segments = try? await engine.transcribe(
                 samples: slice,
-                options: .init(languageHint: recommendedModel.languageHint, initialPrompt: recommendedModel.initialPrompt)
+                options: decodeOptions(languageHint: recommendedModel.languageHint, model: recommendedModel, vad: false)
               )
         else { return nil }
 
@@ -446,21 +468,22 @@ final class WhisperService {
     private func runChunked(
         samples: [Float],
         engine: WhisperTranscribing,
-        languageHint: String?,
-        initialPrompt: String? = nil,
+        model: WhisperModelType,
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> String {
+        let languageHint = model.languageHint
+        let options = decodeOptions(languageHint: languageHint, model: model)
         // The single choke point every decode (live preview and final result,
         // every model) passes through - the most useful place to log, since a
         // silent-failure bug report ("nothing shows up") is otherwise ambiguous
         // between "audio capture produced nothing" and "whisper.cpp decoded to
         // nothing" without this.
         DebugLogger.shared.log(
-            "decode start: samples=\(samples.count) hint=\(languageHint ?? "nil") promptChars=\(initialPrompt?.count ?? 0) chunkSeconds=\(chunkDurationSeconds)",
+            "decode start: samples=\(samples.count) hint=\(languageHint ?? "nil") promptChars=\(options.initialPrompt?.count ?? 0) vad=\(options.vadModelPath != nil) chunkSeconds=\(chunkDurationSeconds)",
             category: "whisper"
         )
         do {
-            let text = try await runChunkedUninstrumented(samples: samples, engine: engine, languageHint: languageHint, initialPrompt: initialPrompt, chunkDurationSeconds: chunkDurationSeconds)
+            let text = try await runChunkedUninstrumented(samples: samples, engine: engine, options: options, chunkDurationSeconds: chunkDurationSeconds)
             DebugLogger.shared.log("decode done: textLen=\(text.count)", category: "whisper")
             return text
         } catch {
@@ -472,8 +495,7 @@ final class WhisperService {
     private func runChunkedUninstrumented(
         samples: [Float],
         engine: WhisperTranscribing,
-        languageHint: String?,
-        initialPrompt: String?,
+        options: WhisperEngine.TranscriptionOptions,
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> String {
         let chunkSize = Int(chunkDurationSeconds * Constants.sampleRate)
@@ -483,7 +505,7 @@ final class WhisperService {
             let end = min(start + chunkSize, samples.count)
             let segments = try await engine.transcribe(
                 samples: Array(samples[start..<end]),
-                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
+                options: options
             )
             kept.append(contentsOf: keptSegments(segments))
             start = end
@@ -503,15 +525,15 @@ final class WhisperService {
     private func runChunkedWithSegments(
         samples: [Float],
         engine: WhisperTranscribing,
-        languageHint: String?,
-        initialPrompt: String?,
+        model: WhisperModelType,
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> [TimedSegment] {
+        let options = decodeOptions(languageHint: model.languageHint, model: model)
         let chunkSize = Int(chunkDurationSeconds * Constants.sampleRate)
         guard samples.count > chunkSize else {
             let segments = try await engine.transcribe(
                 samples: samples,
-                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
+                options: options
             )
             return timedSegments(from: segments, chunkStartTime: 0)
         }
@@ -523,7 +545,7 @@ final class WhisperService {
             let chunkStartTime = Double(start) / Constants.sampleRate
             let segments = try await engine.transcribe(
                 samples: Array(samples[start..<end]),
-                options: .init(languageHint: languageHint, initialPrompt: initialPrompt)
+                options: options
             )
             all.append(contentsOf: timedSegments(from: segments, chunkStartTime: chunkStartTime))
             start = end

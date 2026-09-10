@@ -50,6 +50,16 @@ final class SettingsViewModel {
         }
     }
 
+    var skipSilence: Bool {
+        get { settings.skipSilence }
+        set { settings.skipSilence = newValue }
+    }
+
+    var vocabularyHints: Bool {
+        get { settings.vocabularyHints }
+        set { settings.vocabularyHints = newValue }
+    }
+
     var saveDebugAudio: Bool {
         get { settings.saveDebugAudio }
         set { settings.saveDebugAudio = newValue }

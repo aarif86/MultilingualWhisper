@@ -8,6 +8,15 @@ struct ContentView: View {
     let flowSession: FlowSessionEngine
     @Binding var quickDictateActive: Bool
     let quickDictateSessionID: UUID
+    @AppStorage(OnboardingView.completedKey) private var hasCompletedOnboarding = false
+
+    /// Shown until finished or skipped; never re-shown afterwards.
+    private var showOnboarding: Binding<Bool> {
+        Binding(
+            get: { !hasCompletedOnboarding },
+            set: { if !$0 { hasCompletedOnboarding = true } }
+        )
+    }
 
     var body: some View {
         TabView {
@@ -25,6 +34,12 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $quickDictateActive) {
             QuickDictateView(audioService: audioService, whisperService: whisperService)
                 .id(quickDictateSessionID)
+        }
+        .fullScreenCover(isPresented: showOnboarding) {
+            OnboardingView(modelDownloadService: modelDownloadService) {
+                hasCompletedOnboarding = true
+            }
+            .interactiveDismissDisabled()
         }
     }
 }

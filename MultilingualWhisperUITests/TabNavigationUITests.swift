@@ -7,6 +7,7 @@ final class TabNavigationUITests: XCTestCase {
 
     func testSwitchingToDictionaryTabShowsDictionaryScreen() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--skip-onboarding"]
         app.launch()
 
         app.tabBars.buttons["Dictionary"].tap()
@@ -15,6 +16,7 @@ final class TabNavigationUITests: XCTestCase {
 
     func testSwitchingToSettingsTabShowsSettingsScreen() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--skip-onboarding"]
         app.launch()
 
         app.tabBars.buttons["Settings"].tap()
@@ -24,6 +26,7 @@ final class TabNavigationUITests: XCTestCase {
 
     func testCanNavigateBackToHomeTabFromSettings() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--skip-onboarding"]
         app.launch()
 
         app.tabBars.buttons["Settings"].tap()

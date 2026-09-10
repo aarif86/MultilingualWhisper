@@ -185,7 +185,18 @@ needed:
 
 To put dictation on a physical button: Settings → Action Button → Shortcut →
 pick "Dictate" under Nasar Flow (iPhone 15 Pro and later), or Settings →
-Accessibility → Touch → Back Tap → Double Tap → the same shortcut. Every intent
+Accessibility → Touch → Back Tap → Double Tap → the same shortcut. The same
+steps are in the app under Settings → "Action Button, Back Tap & Siri".
+
+## First run
+
+Three screens on a fresh install (`OnboardingView`): the microphone and the
+two permissions the app will ever ask for, each with a one-line why, plus a
+"don't dictate passwords" warning; one starting model named by what it is for
+(Singapore / Malaysia / Arabic) with the adaptation-phase note; and the
+keyboard with the "why Full Access" line. Skippable at every step, never shown
+twice, skipped entirely for installs that already have a model. Settings →
+"Show the Welcome Screens Again" brings it back. Every intent
 opens the app because iOS only lets a foreground app start the microphone.
 Control Center controls and Lock Screen widgets need a widget extension (a
 second bundle ID and provisioning profile), so they are not included yet.

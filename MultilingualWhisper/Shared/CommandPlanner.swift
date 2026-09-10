@@ -47,7 +47,60 @@ enum CommandPlanner {
             return recase(contextBefore: contextBefore, lastInserted: lastInserted) { $0.lowercased() }
         case .literal(let text):
             return text.isEmpty ? [] : [.insertDictation(text)]
+        case .spell(let word):
+            return word.isEmpty ? [] : [.insertDictation(word)]
+        case .replace(let target, let replacement):
+            return replace(target, with: replacement, contextBefore: contextBefore)
         }
+    }
+
+    // MARK: - Replace
+
+    /// Rewrites the last whole-word, case-insensitive occurrence of `target`
+    /// before the cursor. The proxy can only delete backwards and insert at the
+    /// cursor, so everything from the match to the cursor is deleted and retyped
+    /// with the replacement in place - deterministic, unlike moving the cursor
+    /// (`adjustTextPosition` updates the context lazily). Empty when not found.
+    static func replace(_ target: String, with replacement: String, contextBefore: String) -> [EditOp] {
+        guard let range = lastWholeWordRange(of: target, in: contextBefore) else { return [] }
+        let found = String(contextBefore[range])
+        let tail = String(contextBefore[range.upperBound...])
+        let recased = matchCase(of: found, onto: replacement)
+        return [.deleteBackward(contextBefore.distance(from: range.lowerBound, to: contextBefore.endIndex)), .insertRaw(recased + tail)]
+    }
+
+    /// The last occurrence of `target` (case- and diacritic-insensitive) whose
+    /// neighbours are not letters or digits.
+    static func lastWholeWordRange(of target: String, in text: String) -> Range<String.Index>? {
+        let needle = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return nil }
+        var searchRange = text.startIndex..<text.endIndex
+        var best: Range<String.Index>?
+        while let range = text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: searchRange) {
+            let before = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+            let after = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+            if !(before?.isLetter ?? false), !(before?.isNumber ?? false), !(after?.isLetter ?? false), !(after?.isNumber ?? false) {
+                best = range
+            }
+            guard range.upperBound < text.endIndex else { break }
+            searchRange = text.index(after: range.lowerBound)..<text.endIndex
+        }
+        return best
+    }
+
+    /// Copies the case shape of the word being replaced onto the replacement:
+    /// all-caps stays all-caps (MRT -> LRT), a leading capital stays (Tampines ->
+    /// Tampines), anything else is left as spoken.
+    static func matchCase(of original: String, onto replacement: String) -> String {
+        let letters = original.filter(\.isLetter)
+        guard let first = letters.first, first.isCased else { return replacement }
+        if letters.count > 1, letters.allSatisfy(\.isUppercase) {
+            return replacement.uppercased()
+        }
+        if first.isUppercase, let head = replacement.first, head.isCased, head.isLowercase {
+            return head.uppercased() + replacement.dropFirst()
+        }
+        return replacement
     }
 
     // MARK: - Targets

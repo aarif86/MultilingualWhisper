@@ -43,6 +43,9 @@ final class KeyboardViewController: UIInputViewController {
     /// What the app heard in command mode when it matched no command - shown so
     /// the user can insert it as text or dismiss it, never silently dropped.
     private var unrecognizedCommandText: String?
+    /// A command that was understood but could not be carried out here, e.g.
+    /// "change tea to tee" with no "tea" before the cursor.
+    private var commandNotice: String?
     private var flowPhase: FlowPhase = .idle
     private var tickTimer: Timer?
     private var phaseTimeoutTimer: Timer?
@@ -161,11 +164,13 @@ final class KeyboardViewController: UIInputViewController {
             lastInsertedText: lastInsertedText,
             suggestedCorrection: suggestedCorrection,
             unrecognizedCommand: unrecognizedCommandText,
+            commandNotice: commandNotice,
             flowState: currentFlowUIState(),
             onStartListening: { [weak self] in self?.startListening() },
             onStartCommand: { [weak self] in self?.startCommandListening() },
             onInsertUnrecognized: { [weak self] in self?.insertUnrecognizedAsText() },
             onDismissUnrecognized: { [weak self] in self?.dismissUnrecognized() },
+            onDismissNotice: { [weak self] in self?.dismissNotice() },
             onStopListening: { [weak self] in self?.stopListening() },
             onUndoInsert: { [weak self] in self?.undoLastInsert() },
             onLearnCorrection: { [weak self] in self?.learnSuggestedCorrection() },
@@ -213,6 +218,10 @@ final class KeyboardViewController: UIInputViewController {
             lastInserted: lastInsertedText
         )
         DebugLogger.shared.log("Flow: executing \(command.displayName) as \(ops)", category: "keyboard")
+        if case .replace(let target, _) = command, ops.isEmpty {
+            commandNotice = "Couldn't find \u{201C}\(target)\u{201D} before the cursor"
+            return
+        }
         for op in ops {
             switch op {
             case .deleteBackward(let count):
@@ -235,6 +244,11 @@ final class KeyboardViewController: UIInputViewController {
 
     private func dismissUnrecognized() {
         unrecognizedCommandText = nil
+        refresh()
+    }
+
+    private func dismissNotice() {
+        commandNotice = nil
         refresh()
     }
 
@@ -374,6 +388,7 @@ final class KeyboardViewController: UIInputViewController {
         suggestionDismissed = false
         lastCheckedContext = nil
         unrecognizedCommandText = nil
+        commandNotice = nil
         DictationHandoff.clearPending()
         refresh()
     }

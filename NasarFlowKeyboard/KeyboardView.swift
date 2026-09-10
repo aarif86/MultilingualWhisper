@@ -26,12 +26,15 @@ struct KeyboardView: View {
     let suggestedCorrection: CorrectionLearner.Correction?
     /// A command-mode utterance the app could not match to any command.
     let unrecognizedCommand: String?
+    /// A command that was understood but had nothing to act on.
+    let commandNotice: String?
     let flowState: FlowUIState
     let onStartListening: () -> Void
     /// Long-press on the mic: the next utterance is a VoiceCommand.
     let onStartCommand: () -> Void
     let onInsertUnrecognized: () -> Void
     let onDismissUnrecognized: () -> Void
+    let onDismissNotice: () -> Void
     let onStopListening: () -> Void
     let onUndoInsert: () -> Void
     let onLearnCorrection: () -> Void
@@ -48,6 +51,8 @@ struct KeyboardView: View {
                 // one-tap fix if it heard you wrong.
                 if let unrecognizedCommand {
                     unrecognizedRow(unrecognizedCommand)
+                } else if let commandNotice {
+                    noticeRow(commandNotice)
                 } else if let suggestedCorrection {
                     learnRow(suggestedCorrection)
                 } else if let lastInsertedText {
@@ -159,6 +164,28 @@ struct KeyboardView: View {
                 .controlSize(.small)
             Button {
                 onDismissUnrecognized()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func noticeRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            Button {
+                onDismissNotice()
             } label: {
                 Image(systemName: "xmark")
             }
@@ -305,11 +332,13 @@ struct KeyboardView: View {
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .inactive,
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -324,11 +353,13 @@ struct KeyboardView: View {
         lastInsertedText: nil,
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .listening(elapsed: 4),
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},
@@ -343,11 +374,13 @@ struct KeyboardView: View {
         lastInsertedText: "Bismillah, let's go makan lah",
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
+        commandNotice: nil,
         flowState: .readyToListen,
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},
         onDismissUnrecognized: {},
+        onDismissNotice: {},
         onStopListening: {},
         onUndoInsert: {},
         onLearnCorrection: {},

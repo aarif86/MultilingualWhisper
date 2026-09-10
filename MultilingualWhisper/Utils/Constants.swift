@@ -92,6 +92,13 @@ enum Constants {
     static let flowSessionIdleWarning: TimeInterval = 5 * 60
     /// How many recent dictations keep their audio for retry (UtteranceAudioStore).
     static let maxRecentUtterances = 10
+    /// A Flow utterance ends itself after this much continuous silence (when
+    /// "Auto-stop when silent" is on) - generous enough for a mid-sentence
+    /// pause, short enough that text appears without a second tap.
+    static let flowSilenceTimeout: TimeInterval = 2.5
+    /// No silence judgement until this long into an utterance: the beat between
+    /// tapping the mic and starting to speak is not a pause.
+    static let flowSilenceGrace: TimeInterval = 1.2
     static let defaultVADThreshold: Float = 0.7
 
     // MARK: - Language detection heuristics

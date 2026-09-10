@@ -73,6 +73,7 @@ final class FlowSessionEngineTests: XCTestCase {
     private func makeEngine(
         returning mock: MockWhisperEngine,
         keepRecentAudio: Bool = true,
+        autoStopOnSilence: Bool = true,
         idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout,
         latencyLog: LatencyLog = LatencyLog(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-latency-\(UUID())")!)
     ) -> FlowSessionEngine {
@@ -88,7 +89,96 @@ final class FlowSessionEngineTests: XCTestCase {
         // regardless of anything else running in this process.
         let isolatedSettings = AppSettings(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-\(UUID())")!)
         isolatedSettings.keepRecentAudio = keepRecentAudio
+        isolatedSettings.autoStopOnSilence = autoStopOnSilence
         return FlowSessionEngine(whisperService: whisperService, modelContainer: container, settings: isolatedSettings, idleTimeout: idleTimeout, latencyLog: latencyLog)
+    }
+
+    // MARK: - Silence auto-stop
+
+    private func loud(_ count: Int = 1_600) -> [Float] { Array(repeating: 0.1, count: count) }
+    private func quiet(_ count: Int = 1_600) -> [Float] { Array(repeating: 0, count: count) }
+
+    func testSilenceEndsTheUtteranceAndTranscribesIt() async {
+        let mock = MockWhisperEngine(text: "hands free")
+        let engine = makeEngine(returning: mock)
+        engine.test_markActive()
+        let t0 = Date()
+        engine.test_handleStartSignal()
+
+        engine.test_ingest(loud(), at: t0.addingTimeInterval(0.5))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(2.0))   // silence starts (past the grace period)
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(3.0))   // 1.0 s quiet - not yet
+        XCTAssertTrue(engine.isRecording)
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(4.6))   // 2.6 s quiet - stop
+
+        await engine.test_awaitAutoStop()
+
+        XCTAssertFalse(engine.isRecording)
+        XCTAssertEqual(DictationHandoff.pending()?.text, "hands free")
+        XCTAssertFalse(FlowSessionState.isTranscribing)
+        let callCount = await mock.callCount
+        XCTAssertEqual(callCount, 1)
+    }
+
+    func testSpeechResetsTheSilenceClock() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "still going"))
+        engine.test_markActive()
+        let t0 = Date()
+        engine.test_handleStartSignal()
+
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(1.5))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(3.5))   // 2.0 s quiet
+        engine.test_ingest(loud(), at: t0.addingTimeInterval(3.6))    // speech again
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(5.0))   // clock restarted at 5.0
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(7.0))   // 2.0 s quiet - not yet
+
+        await engine.test_awaitAutoStop()
+
+        XCTAssertTrue(engine.isRecording, "a pause under the timeout never ends the utterance")
+        XCTAssertNil(DictationHandoff.pending())
+    }
+
+    func testSilenceInsideTheGracePeriodIsIgnored() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "x"))
+        engine.test_markActive()
+        let t0 = Date()
+        engine.test_handleStartSignal()
+
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(0.2))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(1.0))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(1.1))
+
+        await engine.test_awaitAutoStop()
+
+        XCTAssertTrue(engine.isRecording)
+    }
+
+    func testAutoStopIsOffWhenTheSettingIsOff() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "x"), autoStopOnSilence: false)
+        engine.test_markActive()
+        let t0 = Date()
+        engine.test_handleStartSignal()
+
+        engine.test_ingest(loud(), at: t0.addingTimeInterval(0.5))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(2.0))
+        engine.test_ingest(quiet(), at: t0.addingTimeInterval(10.0))
+
+        await engine.test_awaitAutoStop()
+
+        XCTAssertTrue(engine.isRecording)
+    }
+
+    func testKeyboardCanSeeTranscribingForAnUtteranceItDidNotStop() async {
+        let engine = makeEngine(returning: MockWhisperEngine(text: "hello"))
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(loud())
+        XCTAssertFalse(FlowSessionState.isTranscribing)
+
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertFalse(FlowSessionState.isTranscribing, "cleared once the text is published")
+        XCTAssertEqual(DictationHandoff.pending()?.text, "hello")
     }
 
     // MARK: - Latency

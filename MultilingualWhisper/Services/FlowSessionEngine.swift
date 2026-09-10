@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import Observation
 import SwiftData
@@ -45,6 +46,11 @@ final class FlowSessionEngine {
     /// long-press) - it will be interpreted as a `VoiceCommand`, never inserted.
     private var isCommandUtterance = false
     private var utteranceStartDate: Date?
+    /// When the input first dropped below the silence cutoff during this
+    /// utterance; nil while speech is heard. See `evaluateSilence`.
+    private var silenceStartDate: Date?
+    /// The decode started by the silence auto-stop, awaitable by tests.
+    private var autoStopTask: Task<Void, Never>?
     private var sampleStreamTask: Task<Void, Never>?
     private var sampleContinuation: AsyncStream<[Float]>.Continuation?
     private var startObserver: DarwinNotification.Observer?
@@ -202,6 +208,7 @@ final class FlowSessionEngine {
         DebugLogger.shared.log("FlowSession received startUtterance, isActive=\(isActive) alreadyCapturing=\(isCapturingUtterance)", category: "flow")
         guard isActive, !isCapturingUtterance else { return }
         samples.removeAll(keepingCapacity: true)
+        silenceStartDate = nil
         isCapturingUtterance = true
         isCommandUtterance = FlowSessionState.consumeRequestedCommandMode()
         FlowSessionState.utteranceIsCommand = isCommandUtterance
@@ -234,8 +241,16 @@ final class FlowSessionEngine {
         FlowSessionState.isRecording = false
         FlowSessionState.utteranceStartedAt = nil
         touchIdleDeadline()
+        guard publish else {
+            DarwinNotification.post(FlowSessionState.stateChanged)
+            return
+        }
+        FlowSessionState.isTranscribing = true
+        defer {
+            FlowSessionState.isTranscribing = false
+            DarwinNotification.post(FlowSessionState.stateChanged)
+        }
         DarwinNotification.post(FlowSessionState.stateChanged)
-        guard publish else { return }
         guard !captured.isEmpty else {
             // Was silently doing nothing here - the keyboard would sit on
             // "Transcribing..." for its full timeout with no way to tell this
@@ -405,9 +420,39 @@ final class FlowSessionEngine {
     /// Gated by `isCapturingUtterance` - the engine/tap runs continuously for
     /// the whole session (see the type doc comment for why), but only actual
     /// utterances get buffered, so an idle session doesn't grow this forever.
-    private func ingest(_ chunk: [Float]) {
+    private func ingest(_ chunk: [Float], now: Date = Date()) {
         guard isCapturingUtterance else { return }
         samples.append(contentsOf: chunk)
+        evaluateSilence(rms: Self.rms(of: chunk), now: now)
+    }
+
+    // MARK: - Silence auto-stop
+
+    /// The same energy rule as `AudioService.evaluateVAD` (same setting, same
+    /// sensitivity, same cutoff scale) applied to a Flow utterance: after
+    /// `Constants.flowSilenceTimeout` of continuous quiet, the utterance ends
+    /// itself and transcribes - so "tap, talk, stop talking" is enough, and the
+    /// text appears without a second tap. Off with "Auto-stop when silent".
+    private func evaluateSilence(rms: Float, now: Date) {
+        guard settings.autoStopOnSilence, let start = utteranceStartDate,
+              now.timeIntervalSince(start) > Constants.flowSilenceGrace else { return }
+        let silenceCutoff = settings.vadSensitivity * 0.015
+        guard rms < silenceCutoff else {
+            silenceStartDate = nil
+            return
+        }
+        if silenceStartDate == nil { silenceStartDate = now }
+        guard let since = silenceStartDate, now.timeIntervalSince(since) > Constants.flowSilenceTimeout else { return }
+        DebugLogger.shared.log("FlowSession silence auto-stop after \(Int(now.timeIntervalSince(start)))s, samples=\(samples.count)", category: "flow")
+        silenceStartDate = nil
+        autoStopTask = Task { await finishUtterance(publish: true) }
+    }
+
+    nonisolated private static func rms(of chunk: [Float]) -> Float {
+        guard !chunk.isEmpty else { return 0 }
+        var value: Float = 0
+        chunk.withUnsafeBufferPointer { vDSP_rmsqv($0.baseAddress!, 1, &value, vDSP_Length(chunk.count)) }
+        return value
     }
 
     // MARK: - Format conversion (runs on the audio render thread - no `self`)
@@ -463,8 +508,14 @@ extension FlowSessionEngine {
         FlowSessionState.isActive = true
     }
 
-    func test_ingest(_ chunk: [Float]) {
-        ingest(chunk)
+    func test_ingest(_ chunk: [Float], at now: Date = Date()) {
+        ingest(chunk, now: now)
+    }
+
+    /// Waits for a decode the silence auto-stop started, if any.
+    func test_awaitAutoStop() async {
+        await autoStopTask?.value
+        autoStopTask = nil
     }
 
     func test_handleStartSignal() {

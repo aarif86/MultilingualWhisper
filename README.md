@@ -80,8 +80,10 @@ afterward, rather than hopping to the main app for every single utterance:
    for an app to do this last step automatically (see the "Flow is on"
    screen's own swipe-gesture tip); this activation only has to happen once,
    not per dictation
-3. The keyboard now shows a **mic button** directly - tap to speak, tap
-   again to stop. Each dictation is sent to the already-running background
+3. The keyboard now shows a **mic button** directly - tap to speak, then
+   either tap again or simply stop talking: after 2.5 s of silence the
+   utterance finishes itself (Settings → "Auto-stop when silent", same
+   sensitivity slider as the in-app recorder). Each dictation is sent to the already-running background
    session via Darwin notifications and transcribed through the exact same
    pipeline as the main app, then dropped into a shared App Group container
    and typed in by the keyboard the moment it appears (one tap removes it,

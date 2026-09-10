@@ -119,7 +119,14 @@ enum ChatExportParser {
                 counts[word, default: 0] += 1
             }
         }
-        return counts.sorted { $0.value > $1.value || ($0.value == $1.value && $0.key < $1.key) }
+        // Explicit parameter/return types and an if/else instead of one
+        // compound boolean expression - Swift's type checker times out on
+        // the terser `$0.value > $1.value || ($0.value == $1.value && ...)`
+        // form here (confirmed via a real CI failure, not a style choice).
+        return counts.sorted { (lhs: (key: String, value: Int), rhs: (key: String, value: Int)) -> Bool in
+            if lhs.value != rhs.value { return lhs.value > rhs.value }
+            return lhs.key < rhs.key
+        }
     }
 
     // MARK: - Putting it together

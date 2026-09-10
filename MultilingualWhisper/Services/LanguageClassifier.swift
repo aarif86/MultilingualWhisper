@@ -39,6 +39,17 @@ protocol LanguageClassifying {
 /// (a bundled Core ML model, a real fastText binary, etc.) and hand it to `WhisperService`
 /// without touching any call site.
 struct RuleBasedLanguageClassifier: LanguageClassifying {
+    /// Words the user has approved on top of the built-in lists - see
+    /// `UserLanguageKeywords`. Merged in at classify time rather than mutating
+    /// `Constants`'s sets directly, so the built-in vocabulary stays a fixed,
+    /// versioned fact about the app and per-user additions stay separately
+    /// swappable/resettable data. Empty by default: every existing call site
+    /// and test keeps behaving exactly as before unless it opts in.
+    var additionalMalayKeywords: Set<String> = []
+    var additionalSinglishMarkers: Set<String> = []
+
+    private var malayKeywords: Set<String> { Constants.malayKeywords.union(additionalMalayKeywords) }
+    private var singlishMarkers: Set<String> { Constants.singlishMarkers.union(additionalSinglishMarkers) }
 
     func classify(text: String) -> LanguageClassification {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,8 +66,8 @@ struct RuleBasedLanguageClassifier: LanguageClassifying {
                 .split(whereSeparator: { !$0.isLetter })
                 .map(String.init)
         )
-        let malayHits = words.intersection(Constants.malayKeywords).count
-        let singlishHits = words.intersection(Constants.singlishMarkers).count
+        let malayHits = words.intersection(malayKeywords).count
+        let singlishHits = words.intersection(singlishMarkers).count
         let arabicPhraseHits = Constants.arabicKeywords.filter { trimmed.contains($0) }.count
         let romanizedArabicHits = words.intersection(Constants.romanizedArabicMarkers).count
         let hasArabic = arabicScalarCount > 0 || arabicPhraseHits > 0 || romanizedArabicHits > 0

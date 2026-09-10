@@ -9,6 +9,18 @@ configs:
   Debug: debug
   Release: release
 
+# WhatsApp's iOS export hands over a real .zip (see ChatImportService) -
+# Foundation has no built-in reader for standard PKZIP/DEFLATE archives on
+# iOS, so this pulls in the de facto standard pure-Swift library rather than
+# hand-rolling DEFLATE decompression. First SPM dependency in this project
+# (whisper.cpp is vendored as a submodule + its own build script instead) -
+# CI now resolves this from GitHub on every run, a new network dependency
+# worth knowing about if a build ever fails at "Resolve Package Graph".
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
+
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -119,6 +131,7 @@ targets:
       # bundle ID, App ID and profile ("Nasar Flow Widgets"); see README.
       - target: NasarFlowWidgets
         embed: true
+      - package: ZIPFoundation
     scheme:
       testTargets:
         - MultilingualWhisperTests
@@ -195,6 +208,7 @@ targets:
       - path: MultilingualWhisperTests
     dependencies:
       - target: MultilingualWhisper
+      - package: ZIPFoundation
     settings:
       base:
         SWIFT_VERSION: "5.0"

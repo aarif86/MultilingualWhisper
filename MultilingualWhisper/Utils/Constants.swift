@@ -161,11 +161,33 @@ enum Constants {
         // instead of transcribed, so there was no keyword left in the final
         // text for classification to catch even before considering routing.
         "tukar",
+        // Everything above is "proper"-spelling Malay - real usage runs on SMS
+        // shorthand instead, and none of it was covered. Measured directly
+        // against ~17k real messages (a WhatsApp export, word-frequency +
+        // classifier simulation, 2026-09-10): 80.2% of genuinely Malay-dominant
+        // conversation was falling through to the English default because zero
+        // keywords matched, not because the wrong model transcribed it. These
+        // are the shorthand forms that actually showed up, each seen dozens to
+        // over a thousand times: pronouns/demonstratives (dia, ni, tu, kita,
+        // org, dorg), particles (je, yg, pon, kan, nye, pun), shortened content
+        // words (nk/nak, tk/dah/dh/da for tak/sudah, dgn, utk/untuk, sbb, tau/
+        // tahu, ble/boleh, kene/kena), and the rest of the everyday vocabulary
+        // that came with them.
+        "dia", "nk", "tk", "dah", "je", "ni", "tu", "yg", "kat", "ke", "tgh",
+        "ada", "kan", "pon", "baru", "mcm", "dgn", "kena", "kene", "klw",
+        "buat", "kita", "nnt", "lagi", "sampai", "kalau", "tahu", "tau", "sbb",
+        "tadi", "apa", "nye", "amek", "org", "ade", "yang", "pasal", "dari",
+        "kasi", "dh", "ruma", "pakai", "semua", "ble", "dulu", "di", "dpt",
+        "jap", "untuk", "utk", "lepas", "besok", "duit", "tapi", "pun", "dorg",
+        "jadi", "bukan", "balek", "ckp", "da",
     ]
 
     static let singlishMarkers: Set<String> = [
         "lah", "leh", "lor", "sia", "wor", "meh", "already", "can", "cannot",
         "shiok", "alamak", "walao", "aiyo", "steady", "sian",
+        // "la" - the same discourse particle as "lah" with the silent h
+        // dropped, not a separate word - same real-message analysis as above.
+        "la",
     ]
 
     // MARK: - UI

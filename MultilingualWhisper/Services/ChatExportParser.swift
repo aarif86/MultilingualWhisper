@@ -123,10 +123,15 @@ enum ChatExportParser {
         // compound boolean expression - Swift's type checker times out on
         // the terser `$0.value > $1.value || ($0.value == $1.value && ...)`
         // form here (confirmed via a real CI failure, not a style choice).
-        return counts.sorted { (lhs: (key: String, value: Int), rhs: (key: String, value: Int)) -> Bool in
+        let sorted = counts.sorted { (lhs: (key: String, value: Int), rhs: (key: String, value: Int)) -> Bool in
             if lhs.value != rhs.value { return lhs.value > rhs.value }
             return lhs.key < rhs.key
         }
+        // Dictionary.Element's labels are (key, value), not (word, count) -
+        // different labels make these different tuple types in Swift, so this
+        // needs an explicit re-label, not just a return (confirmed via a real
+        // CI type error).
+        return sorted.map { (word: $0.key, count: $0.value) }
     }
 
     // MARK: - Putting it together

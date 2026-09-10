@@ -23,22 +23,37 @@ struct CustomDictionaryView: View {
     }
 
     var body: some View {
-        Group {
+        List {
+            // A labeled row, not an icon tucked into the toolbar - that's
+            // where this lived in the first release and real testing showed
+            // nobody found it. A feature nobody can see is the same as a
+            // feature that doesn't exist.
+            Section {
+                NavigationLink {
+                    LanguageKeywordsView(languageKeywords: languageKeywords)
+                } label: {
+                    languageWordsRow
+                }
+            }
+
             if dictionaryService.entries.isEmpty {
-                emptyState
+                Section {
+                    emptyState
+                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             } else {
-                entryList
+                entryListSection
+            }
+        }
+        .searchable(text: $searchText, prompt: "Search corrections")
+        .overlay {
+            if !dictionaryService.entries.isEmpty, filteredEntries.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             }
         }
         .navigationTitle("Custom Dictionary")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                NavigationLink {
-                    LanguageKeywordsView(languageKeywords: languageKeywords)
-                } label: {
-                    Label("Language Words", systemImage: "text.bubble")
-                }
-            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -99,6 +114,24 @@ struct CustomDictionaryView: View {
         }
     }
 
+    private var languageWordsRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "text.bubble.fill")
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Language Words")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("Import a WhatsApp chat to teach new words, or review what's already been added.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     private var emptyState: some View {
         ContentUnavailableView {
             Label("No Corrections Yet", systemImage: "textformat.abc")
@@ -111,30 +144,22 @@ struct CustomDictionaryView: View {
         }
     }
 
-    private var entryList: some View {
-        List {
-            Section {
-                ForEach(filteredEntries) { entry in
-                    Button {
-                        editorMode = .edit(entry)
-                    } label: {
-                        DictionaryEntryRow(entry: entry)
-                    }
-                    .buttonStyle(.plain)
+    private var entryListSection: some View {
+        Section {
+            ForEach(filteredEntries) { entry in
+                Button {
+                    editorMode = .edit(entry)
+                } label: {
+                    DictionaryEntryRow(entry: entry)
                 }
-                .onDelete { offsets in
-                    let ids = offsets.map { filteredEntries[$0].id }
-                    for id in ids { dictionaryService.remove(id: id) }
-                }
-            } footer: {
-                Text("Corrections apply to every transcript, with every model, in one pass. Longer phrases win, and each spoken form belongs to one correction only.")
+                .buttonStyle(.plain)
             }
-        }
-        .searchable(text: $searchText, prompt: "Search corrections")
-        .overlay {
-            if filteredEntries.isEmpty {
-                ContentUnavailableView.search(text: searchText)
+            .onDelete { offsets in
+                let ids = offsets.map { filteredEntries[$0].id }
+                for id in ids { dictionaryService.remove(id: id) }
             }
+        } footer: {
+            Text("Corrections apply to every transcript, with every model, in one pass. Longer phrases win, and each spoken form belongs to one correction only.")
         }
     }
 

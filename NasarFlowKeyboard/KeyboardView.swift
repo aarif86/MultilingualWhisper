@@ -27,6 +27,11 @@ struct KeyboardView: View {
     /// A command-mode utterance the app could not match to any command.
     let unrecognizedCommand: String?
     let flowState: FlowUIState
+    /// The style pill: what the user picked, and what `auto` resolves to for
+    /// the current field - see DictationStyle.
+    let style: DictationStyle
+    let resolvedStyle: DictationStyle
+    let onCycleStyle: () -> Void
     let onStartListening: () -> Void
     /// Long-press on the mic: the next utterance is a VoiceCommand.
     let onStartCommand: () -> Void
@@ -53,6 +58,9 @@ struct KeyboardView: View {
                 } else if let lastInsertedText {
                     undoInsertRow(lastInsertedText)
                 }
+                if case .inactive = flowState {} else {
+                    stylePill
+                }
                 flowControl
             }
         }
@@ -74,6 +82,30 @@ struct KeyboardView: View {
             transcribingView
         case .failed:
             failedButton
+        }
+    }
+
+    /// "Pick the style before you speak" (Cleft) - one tap cycles Auto / Chat /
+    /// Email / Notes / Exact, and Auto shows what it has settled on for this
+    /// field so a wrong guess is visible before, not after, the dictation.
+    private var stylePill: some View {
+        HStack {
+            Button {
+                onCycleStyle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: resolvedStyle.symbolName)
+                    Text(style == .auto ? "Auto \u{00B7} \(resolvedStyle.displayName)" : style.displayName)
+                }
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.thinMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Style: \(style == .auto ? "Auto, \(resolvedStyle.displayName)" : style.displayName)")
+            .accessibilityHint("Tap to change how dictation is formatted")
+            Spacer(minLength: 0)
         }
     }
 
@@ -306,6 +338,9 @@ struct KeyboardView: View {
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
         flowState: .inactive,
+        style: .auto,
+        resolvedStyle: .notes,
+        onCycleStyle: {},
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},
@@ -325,6 +360,9 @@ struct KeyboardView: View {
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
         flowState: .listening(elapsed: 4),
+        style: .messaging,
+        resolvedStyle: .messaging,
+        onCycleStyle: {},
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},
@@ -344,6 +382,9 @@ struct KeyboardView: View {
         suggestedCorrection: nil,
         unrecognizedCommand: nil,
         flowState: .readyToListen,
+        style: .auto,
+        resolvedStyle: .messaging,
+        onCycleStyle: {},
         onStartListening: {},
         onStartCommand: {},
         onInsertUnrecognized: {},

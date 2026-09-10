@@ -291,6 +291,15 @@ final class FlowSessionEngine {
     }
 
     private func transcribeAndPublish(_ samples: [Float], duration: TimeInterval, audioFileName: String?) async {
+        // Style for the field the keyboard is in right now (DictationStyle):
+        // resolved per utterance, so a pill tap or a change of field between two
+        // dictations applies to the very next one.
+        whisperService.activeStyle = FlowSessionState.resolvedStyleProfile()
+        defer { whisperService.activeStyle = .standard }
+        DebugLogger.shared.log(
+            "FlowSession style: \(FlowSessionState.resolvedStyle.rawValue) (picked \(FlowSessionState.dictationStyle.rawValue), field \(FlowSessionState.hostFieldHint.rawValue))",
+            category: "flow"
+        )
         do {
             let result: WhisperService.TranscriptionResult
             let chunkSeconds = TimeInterval(settings.maxRecordDurationSeconds)

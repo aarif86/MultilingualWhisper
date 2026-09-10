@@ -117,6 +117,23 @@ app → General → Keyboard → Keyboards → Add New Keyboard → Nasar Flow**
 tap it again and turn on **Allow Full Access** (required - a keyboard needs it
 to be allowed to open another app at all).
 
+## Styles
+
+The keyboard's style pill (above the mic) is the answer every desktop tool gives
+with an LLM - Wispr's Personal/Work/Email, Willow's Casual Messaging/Email/Notes,
+Superwhisper's Message/Email/Note - done deterministically, so it costs nothing
+and never rewrites a word (`MultilingualWhisper/Shared/DictationStyle.swift`).
+**Auto** reads the field's own traits (the only thing iOS lets a keyboard see of
+its host) and shows what it picked; one tap cycles the presets, and the choice
+applies to the very next dictation, mid-session.
+
+| Style | Auto picks it when | Does |
+|---|---|---|
+| **Chat** | the return key says Send, or the field is a search box | your Cleanup level, minus a lone full stop at the end of a one-line message |
+| **Email** | (explicit pick) | numbers as digits, sentences capitalised, last sentence closed |
+| **Notes** | any other field | exactly your Cleanup level |
+| **Exact** | email, URL, phone or number keyboards, password fields, fields with auto-capitalisation off | no capitals, no trailing full stop; spaces removed in address fields ("aarif at gmail dot com" -> `aarif@gmail.com`) |
+
 ## Voice commands
 
 **Long-press** the keyboard's mic instead of tapping it, and the next utterance

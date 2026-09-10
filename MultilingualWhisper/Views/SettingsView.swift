@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
     @State private var showClearAllConfirmation = false
     @State private var showKeyboardSetup = false
+    @State private var showShortcutsGuide = false
+    @AppStorage(OnboardingView.completedKey) private var hasCompletedOnboarding = false
     // Toggled after clearing the debug log/audio, and on every appearance of
     // this screen, to force hasDebugLog/latestDebugAudioURL to re-evaluate -
     // SwiftUI has no other reason to know a file written from the Home tab
@@ -49,8 +51,18 @@ struct SettingsView: View {
                     } label: {
                         Label("Set Up Keyboard", systemImage: "keyboard")
                     }
+                    Button {
+                        showShortcutsGuide = true
+                    } label: {
+                        Label("Action Button, Back Tap & Siri", systemImage: "button.horizontal.top.press")
+                    }
+                    Button {
+                        hasCompletedOnboarding = false
+                    } label: {
+                        Label("Show the Welcome Screens Again", systemImage: "sparkles")
+                    }
                 } footer: {
-                    Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself.")
+                    Text("Dictate into any app - Messages, Notes, anywhere you type - using the Nasar Flow keyboard, without switching apps yourself. Or start dictating from a physical button or Siri.")
                 }
 
                 Section {
@@ -196,6 +208,9 @@ struct SettingsView: View {
             .onAppear { debugRefreshTrigger.toggle() }
             .sheet(isPresented: $showKeyboardSetup) {
                 KeyboardSetupView()
+            }
+            .sheet(isPresented: $showShortcutsGuide) {
+                ShortcutsGuideView()
             }
             .confirmationDialog(
                 "Delete all transcriptions? This can't be undone.",

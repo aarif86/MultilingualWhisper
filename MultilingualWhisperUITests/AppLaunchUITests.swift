@@ -11,6 +11,7 @@ final class AppLaunchUITests: XCTestCase {
     // this fails on timeout instead of TestFlight silently shipping a crash.
     func testAppLaunchesToHomeTabWithoutCrashing() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--skip-onboarding"]
         app.launch()
 
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 10))
@@ -19,6 +20,7 @@ final class AppLaunchUITests: XCTestCase {
 
     func testAllThreeTabsExist() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--skip-onboarding"]
         app.launch()
 
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 10))

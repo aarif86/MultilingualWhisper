@@ -24,6 +24,7 @@ struct MultilingualWhisperApp: App {
         // live transcription instead of a second, disconnected instance. Same
         // reasoning for flowSession depending on whisperService.
         let downloadService = ModelDownloadService()
+        Self.applyOnboardingLaunchRules(modelStore: downloadService)
         // learnedStore: the keyboard queues spelling corrections it noticed (see
         // CorrectionLearner); the service pulls them in here and on foreground.
         let dictionaryService = CustomDictionaryService(learnedStore: .shared)
@@ -70,6 +71,27 @@ struct MultilingualWhisperApp: App {
             }
         }
         .modelContainer(modelContainer)
+    }
+
+    /// First launch shows `OnboardingView`; an install that already has a model
+    /// downloaded (every user before this screen existed) never sees it. UI tests
+    /// pass `--skip-onboarding` so the existing launch tests land on Home, or
+    /// `--reset-onboarding` to exercise the screens.
+    private static func applyOnboardingLaunchRules(modelStore: ModelDownloadService) {
+        let defaults = UserDefaults.standard
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--reset-onboarding") {
+            defaults.set(false, forKey: OnboardingView.completedKey)
+            return
+        }
+        if arguments.contains("--skip-onboarding") {
+            defaults.set(true, forKey: OnboardingView.completedKey)
+            return
+        }
+        if !defaults.bool(forKey: OnboardingView.completedKey),
+           WhisperModelType.allCases.contains(where: { modelStore.isDownloaded($0) }) {
+            defaults.set(true, forKey: OnboardingView.completedKey)
+        }
     }
 
     /// A fresh UUID forces SwiftUI to recreate QuickDictateView even if the cover

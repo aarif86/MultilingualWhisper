@@ -52,6 +52,7 @@ struct MultilingualWhisperApp: App {
                 whisperService: whisperService,
                 modelDownloadService: modelDownloadService,
                 customDictionaryService: customDictionaryService,
+                userLanguageKeywords: userLanguageKeywords,
                 flowSession: flowSession,
                 quickDictateActive: $quickDictateActive,
                 quickDictateSessionID: quickDictateSessionID

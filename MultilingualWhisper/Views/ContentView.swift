@@ -5,6 +5,7 @@ struct ContentView: View {
     let whisperService: WhisperService
     let modelDownloadService: ModelDownloadService
     let customDictionaryService: CustomDictionaryService
+    let userLanguageKeywords: UserLanguageKeywords
     let flowSession: FlowSessionEngine
     @Binding var quickDictateActive: Bool
     let quickDictateSessionID: UUID
@@ -24,7 +25,7 @@ struct ContentView: View {
                 .tabItem { Label("Home", systemImage: "house") }
 
             NavigationStack {
-                CustomDictionaryView(dictionaryService: customDictionaryService)
+                CustomDictionaryView(dictionaryService: customDictionaryService, languageKeywords: userLanguageKeywords)
             }
             .tabItem { Label("Dictionary", systemImage: "textformat.abc") }
 

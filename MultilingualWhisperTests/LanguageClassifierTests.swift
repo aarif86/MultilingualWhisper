@@ -47,6 +47,21 @@ final class LanguageClassifierTests: XCTestCase {
         XCTAssertEqual(result.components, [.malay])
     }
 
+    func testRealSmsShorthandMalayIsNowRecognizedAsMalay() {
+        // Real bug, found from real data: measuring the classifier against
+        // ~17k messages from an actual WhatsApp conversation (2026-09-10)
+        // showed 80.2% reading as "English (no markers found)" despite being
+        // genuinely Malay-dominant - not because the wrong model transcribed
+        // it, but because the keyword list only had formal-spelling Malay
+        // ("sudah", "terima kasih") and real usage runs on SMS shorthand
+        // instead ("dah", "tgh", "nnt", "kat", "je"...). Every word in this
+        // sentence is shorthand added directly from that analysis - none of
+        // it matched anything before this fix.
+        let result = classifier.classify(text: "dia tgh sibuk, nnt kita jumpa kat sana je")
+        XCTAssertEqual(result.recommendedModel, .malay)
+        XCTAssertEqual(result.languageTag, .malay)
+    }
+
     func testSinglishMarkersAreTaggedSinglish() {
         let result = classifier.classify(text: "Wah this one very shiok already lah")
         XCTAssertEqual(result.recommendedModel, .singlish)

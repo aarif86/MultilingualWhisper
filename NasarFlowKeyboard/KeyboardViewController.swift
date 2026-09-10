@@ -320,6 +320,11 @@ final class KeyboardViewController: UIInputViewController {
         if FlowSessionState.isRecording, let startedAt = FlowSessionState.utteranceStartedAt {
             return .listening(elapsed: Date().timeIntervalSince(startedAt))
         }
+        // The app may have ended the utterance itself (silence auto-stop): no
+        // local "awaiting result" phase exists for that, so read the shared flag.
+        if FlowSessionState.isTranscribing, flowPhase != .failed {
+            return .transcribing
+        }
         switch flowPhase {
         case .awaitingStart: return .listening(elapsed: 0)
         case .awaitingResult: return .transcribing

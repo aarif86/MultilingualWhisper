@@ -111,7 +111,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Recording Settings")
                 } footer: {
-                    Text("If recording keeps stopping itself before you finish speaking, turn off \"Auto-stop when silent\" - you'll just tap the record button again to stop manually instead.")
+                    Text("Auto-stop ends a recording - and a Flow dictation from the keyboard - after \(String(format: "%.1f", Constants.flowSilenceTimeout)) seconds of silence, so the text appears without a second tap. If it keeps cutting you off mid-thought, lower the sensitivity or turn it off and tap to stop instead.")
                 }
 
                 Section {

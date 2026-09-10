@@ -298,7 +298,7 @@ struct KeyboardView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             } else {
-                Text("Hold for a command: new line, delete that, full stop\u{2026}")
+                Text("Stop talking and it types itself. Hold for a command: new line, delete that\u{2026}")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

@@ -36,6 +36,7 @@ enum FlowSessionState {
     private static let lastIdleTimeoutKey = "flow.lastIdleTimeoutAt"
     private static let requestedCommandModeKey = "flow.requestedCommandMode"
     private static let utteranceIsCommandKey = "flow.utteranceIsCommand"
+    private static let isTranscribingKey = "flow.isTranscribing"
     private static let dictationStyleKey = "flow.dictationStyle"
     private static let hostFieldHintKey = "flow.hostFieldHint"
 
@@ -56,6 +57,14 @@ enum FlowSessionState {
     static var isRecording: Bool {
         get { sharedDefaults?.bool(forKey: isRecordingKey) ?? false }
         set { sharedDefaults?.set(newValue, forKey: isRecordingKey) }
+    }
+
+    /// True from the moment an utterance stops being captured (tap, or the
+    /// silence auto-stop) until its text or failure is published. Lets the
+    /// keyboard show "Transcribing…" for an utterance it did not stop itself.
+    static var isTranscribing: Bool {
+        get { sharedDefaults?.bool(forKey: isTranscribingKey) ?? false }
+        set { sharedDefaults?.set(newValue, forKey: isTranscribingKey) }
     }
 
     /// When the current utterance started, so the keyboard can compute its
@@ -146,6 +155,7 @@ enum FlowSessionState {
     static func clear() {
         isActive = false
         isRecording = false
+        isTranscribing = false
         utteranceStartedAt = nil
         lastFailureAt = nil
         idleDeadline = nil

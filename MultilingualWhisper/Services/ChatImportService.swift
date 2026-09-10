@@ -66,7 +66,7 @@ enum ChatImportService {
     /// WhatsApp names the chat file "_chat.txt" - falls back to the first
     /// plain .txt entry in case a future export version renames it, rather
     /// than failing outright on an otherwise-readable archive.
-    static func chatEntry(in archive: Archive) -> Archive.Entry? {
+    static func chatEntry(in archive: Archive) -> Entry? {
         archive.first { $0.path.hasSuffix("_chat.txt") }
             ?? archive.first { $0.path.lowercased().hasSuffix(".txt") }
     }

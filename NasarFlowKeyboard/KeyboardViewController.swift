@@ -187,6 +187,11 @@ final class KeyboardViewController: UIInputViewController {
             executeCommand(payload)
         }
         guard let pending = DictationHandoff.pending() else { return }
+        // The hand-off stage of this dictation's latency record (LatencyLog):
+        // published by the app at pending.date, inserted now.
+        let handoff = Date().timeIntervalSince(pending.date)
+        LatencyLog.shared.recordHandoff(handoff)
+        DebugLogger.shared.log("handoff \(LatencyLog.format(handoff))", category: "latency")
         insert(pending.text)
     }
 

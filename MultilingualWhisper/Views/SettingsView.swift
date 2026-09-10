@@ -23,6 +23,11 @@ struct SettingsView: View {
         return DebugAudioStore.latestFile()
     }
 
+    private var latencySummary: String? {
+        _ = debugRefreshTrigger
+        return LatencyLog.shared.summary()
+    }
+
     init(modelDownloadService: ModelDownloadService) {
         _viewModel = State(initialValue: SettingsViewModel(modelDownloadService: modelDownloadService))
     }
@@ -134,6 +139,27 @@ struct SettingsView: View {
                     Text("Debug Log")
                 } footer: {
                     Text("A local, on-device log of recording/transcription/keyboard activity - nothing here is ever sent anywhere automatically. Share it if something breaks, so it can be diagnosed from real evidence instead of a description.")
+                }
+
+                Section {
+                    if let latencySummary {
+                        Text(latencySummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No dictations timed yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Clear Latency Stats", role: .destructive) {
+                        LatencyLog.shared.clear()
+                        debugRefreshTrigger.toggle()
+                    }
+                    .disabled(latencySummary == nil)
+                } header: {
+                    Text("Latency")
+                } footer: {
+                    Text("Median and 95th-percentile time per stage over the last \(LatencyLog.maxEntries) dictations: how long you spoke, the decode, the cleanup pass, and (keyboard dictations) the hand-off to the keyboard. On-device only.")
                 }
 
                 Section {

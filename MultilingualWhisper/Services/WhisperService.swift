@@ -49,6 +49,19 @@ final class WhisperService {
 
     private(set) var loadedModels: Set<WhisperModelType> = []
 
+    /// Wall-clock split of the most recent `transcribe` / `transcribeWithAutoRouting`
+    /// call: everything (model load, routing, every decode pass) versus the share
+    /// spent in the Custom Dictionary and `TranscriptFormatter`. Callers fold it
+    /// into `LatencyLog` together with their own capture and hand-off stages.
+    struct DecodeTimings: Equatable {
+        var total: TimeInterval
+        var format: TimeInterval
+        var decode: TimeInterval { max(0, total - format) }
+    }
+
+    private(set) var lastTimings: DecodeTimings?
+    private var formatSeconds: TimeInterval = 0
+
     /// Whether `model` can be used right now (downloaded), for UI that offers a
     /// choice of models - e.g. History's "Re-run with…" menu.
     func isModelAvailable(_ model: WhisperModelType) -> Bool {
@@ -140,6 +153,23 @@ final class WhisperService {
         using model: WhisperModelType,
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
     ) async throws -> TranscriptionResult {
+        try await timed { try await transcribeUntimed(samples: samples, using: model, chunkDurationSeconds: chunkDurationSeconds) }
+    }
+
+    /// Resets the format share, runs one public decode entry point, and records
+    /// `lastTimings` whether it returned or threw.
+    private func timed(_ body: () async throws -> TranscriptionResult) async rethrows -> TranscriptionResult {
+        formatSeconds = 0
+        let started = Date()
+        defer { lastTimings = DecodeTimings(total: Date().timeIntervalSince(started), format: formatSeconds) }
+        return try await body()
+    }
+
+    private func transcribeUntimed(
+        samples: [Float],
+        using model: WhisperModelType,
+        chunkDurationSeconds: TimeInterval
+    ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
         let engine = try await loadEngine(for: model)
         let text = try await runChunked(
@@ -168,6 +198,22 @@ final class WhisperService {
         defaultModel: WhisperModelType = .singlish,
         reroutingConfidenceThreshold: Float = 0.6,
         chunkDurationSeconds: TimeInterval = Constants.chunkDurationSeconds
+    ) async throws -> TranscriptionResult {
+        try await timed {
+            try await transcribeWithAutoRoutingUntimed(
+                samples: samples,
+                defaultModel: defaultModel,
+                reroutingConfidenceThreshold: reroutingConfidenceThreshold,
+                chunkDurationSeconds: chunkDurationSeconds
+            )
+        }
+    }
+
+    private func transcribeWithAutoRoutingUntimed(
+        samples: [Float],
+        defaultModel: WhisperModelType,
+        reroutingConfidenceThreshold: Float,
+        chunkDurationSeconds: TimeInterval
     ) async throws -> TranscriptionResult {
         guard !samples.isEmpty else { throw ServiceError.noAudio }
 
@@ -476,6 +522,8 @@ final class WhisperService {
     }
 
     private func joined(_ segments: [WhisperEngine.Segment]) -> String {
+        let started = Date()
+        defer { formatSeconds += Date().timeIntervalSince(started) }
         let text = segments
             .map { TranscriptSanitizer.stripAnnotationTags($0.text) }
             .filter { !$0.isEmpty }

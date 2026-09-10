@@ -52,6 +52,7 @@ final class FlowSessionEngine {
     private var idleTimer: Timer?
     /// See `checkIdle` - injectable so tests don't wait half an hour.
     private let idleTimeout: TimeInterval
+    private let latencyLog: LatencyLog
 
     // `nonisolated(unsafe)`: read-only after init, touched from `convert`
     // which deliberately runs off the main actor - see AudioService's
@@ -67,12 +68,14 @@ final class FlowSessionEngine {
         whisperService: WhisperService,
         modelContainer: ModelContainer,
         settings: AppSettings = .shared,
-        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout
+        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout,
+        latencyLog: LatencyLog = .shared
     ) {
         self.whisperService = whisperService
         self.modelContext = ModelContext(modelContainer)
         self.settings = settings
         self.idleTimeout = idleTimeout
+        self.latencyLog = latencyLog
 
         // Registered immediately at app launch (this is created as app-level
         // @State), not lazily on activation - so a signal arriving is never
@@ -307,11 +310,22 @@ final class FlowSessionEngine {
             saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
             DarwinNotification.post(FlowSessionState.stateChanged)
             DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
+            recordLatency(capture: duration, source: "flow")
         } catch {
             DebugLogger.shared.log("FlowSession transcription failed: \(error)", category: "flow")
             saveFailedToHistory(duration: duration, audioFileName: audioFileName)
             signalFailure()
         }
+    }
+
+    /// Stage timings for this dictation plus the running p50/p95, in the debug log
+    /// after every utterance - see `LatencyLog`. The keyboard adds the hand-off
+    /// stage when it inserts.
+    private func recordLatency(capture: TimeInterval, source: String) {
+        guard let timings = whisperService.lastTimings else { return }
+        let stage = StageTimings(recordedAt: Date(), source: source, capture: capture, decode: timings.decode, format: timings.format, handoff: nil)
+        latencyLog.record(stage)
+        DebugLogger.shared.log("\(stage.line) | \(latencyLog.summary() ?? "")", category: "latency")
     }
 
     private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?) {

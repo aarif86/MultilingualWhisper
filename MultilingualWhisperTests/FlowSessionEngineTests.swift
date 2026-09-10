@@ -69,7 +69,8 @@ final class FlowSessionEngineTests: XCTestCase {
     private func makeEngine(
         returning mock: MockWhisperEngine,
         keepRecentAudio: Bool = true,
-        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout
+        idleTimeout: TimeInterval = Constants.flowSessionIdleTimeout,
+        latencyLog: LatencyLog = LatencyLog(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-latency-\(UUID())")!)
     ) -> FlowSessionEngine {
         let whisperService = WhisperService(modelStore: StubModelStore(), customDictionary: CustomDictionaryService(), cleanupLevel: { .raw }, makeEngine: { _ in mock })
         let schema = Schema([Transcription.self])
@@ -83,7 +84,42 @@ final class FlowSessionEngineTests: XCTestCase {
         // regardless of anything else running in this process.
         let isolatedSettings = AppSettings(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-\(UUID())")!)
         isolatedSettings.keepRecentAudio = keepRecentAudio
-        return FlowSessionEngine(whisperService: whisperService, modelContainer: container, settings: isolatedSettings, idleTimeout: idleTimeout)
+        return FlowSessionEngine(whisperService: whisperService, modelContainer: container, settings: isolatedSettings, idleTimeout: idleTimeout, latencyLog: latencyLog)
+    }
+
+    // MARK: - Latency
+
+    func testSuccessfulUtteranceRecordsItsStageTimings() async {
+        let log = LatencyLog(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-latency-\(UUID())")!)
+        let engine = makeEngine(returning: MockWhisperEngine(text: "hello"), latencyLog: log)
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        let entries = log.entries()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.source, "flow")
+        XCTAssertGreaterThanOrEqual(entries.first?.capture ?? -1, 0)
+        XCTAssertGreaterThanOrEqual(entries.first?.decode ?? -1, 0)
+        XCTAssertGreaterThanOrEqual(entries.first?.format ?? -1, 0)
+        XCTAssertNil(entries.first?.handoff, "the keyboard reports the hand-off, not the app")
+
+        log.recordHandoff(0.3)
+        XCTAssertEqual(log.entries().first?.handoff, 0.3)
+    }
+
+    func testFailedUtteranceRecordsNoTimings() async {
+        let log = LatencyLog(defaults: UserDefaults(suiteName: "FlowSessionEngineTests-latency-\(UUID())")!)
+        let engine = makeEngine(returning: MockWhisperEngine(text: ""), latencyLog: log)
+        engine.test_markActive()
+        engine.test_handleStartSignal()
+        engine.test_ingest(Array(repeating: Float(0.1), count: 16_000))
+
+        await engine.test_handleStopSignalAndWait()
+
+        XCTAssertTrue(log.entries().isEmpty)
     }
 
     // MARK: - Start signal

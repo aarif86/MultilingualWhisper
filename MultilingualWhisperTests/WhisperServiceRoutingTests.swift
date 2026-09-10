@@ -75,6 +75,125 @@ final class WhisperServiceRoutingTests: XCTestCase {
         XCTAssertNotNil(service.lastTimings, "a thrown decode still leaves a timing, so a failure's cost is visible too")
     }
 
+    // MARK: - Silero VAD and vocabulary hints
+
+    private func makeService(
+        returning mock: MockWhisperEngine,
+        skipSilence: Bool,
+        vocabularyHints: Bool,
+        vadModelPath: String? = "/models/ggml-silero-v5.1.2.bin",
+        dictionary: CustomDictionaryService? = nil
+    ) -> WhisperService {
+        WhisperService(
+            modelStore: StubModelStore(),
+            customDictionary: dictionary ?? CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests-\(UUID())")!),
+            cleanupLevel: { .raw },
+            skipSilence: { skipSilence },
+            vocabularyHints: { vocabularyHints },
+            vadModelPath: vadModelPath,
+            makeEngine: { _ in mock }
+        )
+    }
+
+    func testSkipSilenceSendsTheVADModelToEveryDecodeExceptProbes() async throws {
+        let mock = MockWhisperEngine(text: "hello", detectedLanguage: "ms")
+        let service = makeService(returning: mock, skipSilence: true, vocabularyHints: false)
+
+        _ = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+        var received = await mock.receivedOptions
+        XCTAssertEqual(received.last?.vadModelPath, "/models/ggml-silero-v5.1.2.bin")
+        XCTAssertEqual(received.last?.vadThreshold, 0.5)
+
+        // A one-second-plus segment triggers the per-segment language probe on a
+        // slice that is already speech: no VAD there, so an all-filtered probe can
+        // never leave a stale language ID behind.
+        let probing = MockWhisperEngine(segments: [WhisperEngine.Segment(text: "jalan jalan", startTime: 0, endTime: 1.5)], detectedLanguage: "ms")
+        let probingService = makeService(returning: probing, skipSilence: true, vocabularyHints: false)
+        _ = try await probingService.transcribeWithAutoRouting(samples: Array(repeating: 0.1, count: 32_000))
+        received = await probing.receivedOptions
+        XCTAssertEqual(received.first?.vadModelPath, "/models/ggml-silero-v5.1.2.bin", "the draft pass skips silence")
+        XCTAssertTrue(received.dropFirst().allSatisfy { $0.vadModelPath == nil }, "probe and re-decode of a speech slice never use the VAD")
+    }
+
+    func testSkipSilenceOffOrNoModelMeansNoVAD() async throws {
+        let mock = MockWhisperEngine(text: "hello")
+        _ = try await makeService(returning: mock, skipSilence: false, vocabularyHints: false).transcribe(samples: [0.1], using: .singlish)
+        _ = try await makeService(returning: mock, skipSilence: true, vocabularyHints: false, vadModelPath: nil).transcribe(samples: [0.1], using: .singlish)
+        let received = await mock.receivedOptions
+        XCTAssertEqual(received.count, 2)
+        XCTAssertTrue(received.allSatisfy { $0.vadModelPath == nil })
+    }
+
+    func testVocabularyHintsPromptTheDictionaryWithCarry() async throws {
+        let dictionary = CustomDictionaryService(defaults: UserDefaults(suiteName: "WhisperServiceRoutingTests-\(UUID())")!)
+        dictionary.add(original: "tam pines", replacement: "Tampines")
+        dictionary.add(original: "nassar", replacement: "Nasar")
+        let mock = MockWhisperEngine(text: "hello")
+        let service = makeService(returning: mock, skipSilence: false, vocabularyHints: true, dictionary: dictionary)
+
+        _ = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+
+        let received = await mock.receivedOptions
+        XCTAssertEqual(received.first?.initialPrompt, "Nasar, Tampines.")
+        XCTAssertEqual(received.first?.carryInitialPrompt, true)
+    }
+
+    func testVocabularyHintsOffLeavesThePromptToTheModel() async throws {
+        let mock = MockWhisperEngine(text: "hello")
+        let service = makeService(returning: mock, skipSilence: false, vocabularyHints: false)
+        _ = try await service.transcribe(samples: [0.1], using: .singlish)
+        let received = await mock.receivedOptions
+        XCTAssertEqual(received.first?.initialPrompt, WhisperModelType.singlish.initialPrompt)
+    }
+
+    // MARK: - Hallucination filter and confidence
+
+    func testHallucinatedSegmentsAreDroppedFromEveryPath() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "Thank you for watching.", startTime: 0, endTime: 0.4, noSpeechProbability: 0.9, confidence: 0.3),
+            WhisperEngine.Segment(text: "we go makan", startTime: 0.4, endTime: 0.8, noSpeechProbability: 0.05, confidence: 0.9),
+            WhisperEngine.Segment(text: "you", startTime: 0.8, endTime: 0.9, noSpeechProbability: 0.7, confidence: 0.2),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+
+        let routed = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(routed.text, "we go makan")
+        XCTAssertEqual(routed.confidence, 0.9, accuracy: 0.001)
+
+        let forced = try await service.transcribe(samples: [0.1, 0.2], using: .singlish)
+        XCTAssertEqual(forced.text, "we go makan")
+        XCTAssertEqual(forced.confidence, 0.9, accuracy: 0.001)
+    }
+
+    func testConfidentThankYouIsKept() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "Thank you.", startTime: 0, endTime: 0.4, noSpeechProbability: 0.1, confidence: 0.95),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(result.text, "Thank you.")
+    }
+
+    func testConfidenceIsWeightedByTextLength() {
+        let confidence = WhisperService.weightedConfidence([("a long confident sentence", 1.0), ("hm", 0.0)])
+        XCTAssertEqual(confidence, 25.0 / 27.0, accuracy: 0.001)
+        XCTAssertEqual(WhisperService.weightedConfidence([]), 1)
+        XCTAssertEqual(WhisperService.weightedConfidence([("", 0.2)]), 1)
+    }
+
+    func testLowConfidenceResultIsFlaggedOnTheHistoryEntry() async throws {
+        let segments = [
+            WhisperEngine.Segment(text: "something mumbled", startTime: 0, endTime: 0.4, noSpeechProbability: 0.2, confidence: 0.3),
+        ]
+        let service = makeService(returning: MockWhisperEngine(segments: segments))
+        let result = try await service.transcribeWithAutoRouting(samples: [0.1, 0.2])
+        XCTAssertEqual(result.confidence, 0.3, accuracy: 0.001)
+
+        let record = Transcription(text: result.text, duration: 1, languageUsed: .singlish, modelUsed: .singlish, confidence: result.confidence)
+        XCTAssertTrue(record.isLowConfidence)
+        XCTAssertFalse(Transcription(text: "x", duration: 1, languageUsed: .singlish, modelUsed: .singlish).isLowConfidence, "entries saved before confidence existed are never flagged")
+    }
+
     // MARK: - Dictionary and formatter reach every path
 
     /// Auto-Detect (the default) used to skip the dictionary and formatter

@@ -51,6 +51,7 @@ struct HomeView: View {
                 transcription.text = result.text
                 transcription.modelUsed = result.modelUsed
                 transcription.languageUsed = result.languageTag
+                transcription.confidence = result.confidence
                 try? modelContext.save()
             } catch {
                 DebugLogger.shared.log("History retry failed: \(error)", category: "history")
@@ -409,6 +410,11 @@ struct HomeView: View {
                 Text(transcription.date, format: .dateTime.hour().minute())
                 Text("· \(Int(transcription.duration))s ·")
                 LanguageBadge(language: transcription.languageUsed, components: languageComponents(for: transcription))
+                if transcription.isLowConfidence {
+                    Label("Unsure", systemImage: "questionmark.circle")
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Low confidence - worth checking before sending")
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)

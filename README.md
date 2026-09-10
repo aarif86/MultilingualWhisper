@@ -36,6 +36,17 @@ below for what's still deliberately simplified.
   that it would do meaningfully better. This two-pass design exists because
   keyword/script matching needs *text*, which you don't have until something has
   already transcribed the audio once.
+- **Decode hygiene** - whisper.cpp's Silero VAD runs first and only the speech
+  is decoded (Settings → "Skip silence before transcribing", on by default);
+  the hallucination guards (`no_speech_thold`, `entropy_thold`,
+  `logprob_thold`, temperature fallback, non-speech-token suppression) are set
+  explicitly in `WhisperEngine`; a bag-of-hallucinations filter drops the
+  YouTube-credit phrases Whisper says to silence in English, Malay and Arabic
+  (`TranscriptSanitizer`); each transcript carries a token-probability
+  confidence, shown as an "Unsure" badge in History when low. "Vocabulary
+  hints" (off by default, experimental) feeds the Custom Dictionary's written
+  forms to the decoder as a short glossary prompt with `carry_initial_prompt`
+  (`GlossaryPrompt`).
 - **Custom Dictionary** - deterministic find/replace on the final text, after any
   model has produced it (`DictionaryMatcher`). One written form, many spoken
   forms ("Nassar", "Nasser" → "Nasar"); whole-word and case-sensitive toggles per

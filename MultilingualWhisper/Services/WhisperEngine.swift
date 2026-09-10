@@ -31,12 +31,60 @@ actor WhisperEngine {
         var threadCount: Int32 = Int32(max(1, ProcessInfo.processInfo.activeProcessorCount - 1))
         /// Prepended as decoder context - handy for biasing towards expected vocabulary.
         var initialPrompt: String?
+        /// Re-prepend `initialPrompt` to every 30 s decode window, not just the
+        /// first, so a vocabulary glossary keeps working through a long dictation.
+        var carryInitialPrompt: Bool = true
+
+        // Hallucination guards (docs/competitor-kb/engine-best-practices.md,
+        // "Hallucination & robustness controls"). Set explicitly rather than
+        // inherited from whisper_full_default_params so a library upgrade can't
+        // silently change them, and so they are visible here for tuning.
+        /// A segment whose no-speech probability exceeds this, while its average
+        /// log-probability is below `logprobThreshold`, is treated as silence.
+        var noSpeechThreshold: Float = 0.6
+        /// Decode is retried at a higher temperature when the segment's entropy
+        /// (repetition) exceeds this - the "compression ratio" guard.
+        var entropyThreshold: Float = 2.4
+        var logprobThreshold: Float = -1.0
+        /// Temperature step for each fallback retry; 0 disables fallback.
+        var temperatureIncrement: Float = 0.2
+        /// Ban whisper's non-speech tokens ("(music)", "♪", "[BLANK_AUDIO]") at
+        /// decode time - a dictation never wants them.
+        var suppressNonSpeechTokens: Bool = true
+        /// Regex over single token strings to ban outright (token-level, so only
+        /// useful for individual symbols, not phrases - see TranscriptSanitizer for
+        /// the phrase-level bag of hallucinations).
+        var suppressRegex: String?
+
+        // Silero VAD (whisper.cpp's bundled implementation). With a model path set,
+        // whisper_full first runs the VAD over the audio and decodes only the
+        // speech segments, joined with 0.1 s of silence - the cheapest and most
+        // effective hallucination guard of all is not feeding the model silence
+        // (Superwhisper "Remove Silence"). Segment times are mapped back to the
+        // original timeline, so per-segment reprocessing keeps working. nil = off.
+        var vadModelPath: String?
+        var vadThreshold: Float = 0.5
+        var vadMinSpeechMs: Int32 = 250
+        var vadMinSilenceMs: Int32 = 100
+        var vadSpeechPadMs: Int32 = 30
     }
 
     struct Segment {
         let text: String
         let startTime: TimeInterval
         let endTime: TimeInterval
+        /// whisper's own estimate that this window held no speech (0…1).
+        let noSpeechProbability: Float
+        /// Mean probability of the text tokens (0…1); 1 when unknown.
+        let confidence: Float
+
+        init(text: String, startTime: TimeInterval, endTime: TimeInterval, noSpeechProbability: Float = 0, confidence: Float = 1) {
+            self.text = text
+            self.startTime = startTime
+            self.endTime = endTime
+            self.noSpeechProbability = noSpeechProbability
+            self.confidence = confidence
+        }
     }
 
     private let context: OpaquePointer
@@ -78,15 +126,38 @@ actor WhisperEngine {
         params.n_threads = options.threadCount
         params.no_context = true
         params.detect_language = options.languageHint == nil
+        params.carry_initial_prompt = options.carryInitialPrompt && options.initialPrompt != nil
+        params.suppress_blank = true
+        params.suppress_nst = options.suppressNonSpeechTokens
+        params.no_speech_thold = options.noSpeechThreshold
+        params.entropy_thold = options.entropyThreshold
+        params.logprob_thold = options.logprobThreshold
+        params.temperature_inc = options.temperatureIncrement
 
         let languageCStr = options.languageHint.map { strdup($0) } ?? nil
         let promptCStr = options.initialPrompt.map { strdup($0) } ?? nil
+        let suppressCStr = options.suppressRegex.map { strdup($0) } ?? nil
+        let vadPathCStr = options.vadModelPath.map { strdup($0) } ?? nil
         defer {
             free(languageCStr)
             free(promptCStr)
+            free(suppressCStr)
+            free(vadPathCStr)
         }
         params.language = UnsafePointer(languageCStr)
         params.initial_prompt = UnsafePointer(promptCStr)
+        params.suppress_regex = UnsafePointer(suppressCStr)
+
+        if let vadPathCStr {
+            params.vad = true
+            params.vad_model_path = UnsafePointer(vadPathCStr)
+            var vad = whisper_vad_default_params()
+            vad.threshold = options.vadThreshold
+            vad.min_speech_duration_ms = options.vadMinSpeechMs
+            vad.min_silence_duration_ms = options.vadMinSilenceMs
+            vad.speech_pad_ms = options.vadSpeechPadMs
+            params.vad_params = vad
+        }
 
         let status = samples.withUnsafeBufferPointer { buffer in
             whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
@@ -101,10 +172,33 @@ actor WhisperEngine {
             let t0 = whisper_full_get_segment_t0(context, i) // centiseconds
             let t1 = whisper_full_get_segment_t1(context, i)
             segments.append(
-                Segment(text: String(cString: cText), startTime: Double(t0) / 100.0, endTime: Double(t1) / 100.0)
+                Segment(
+                    text: String(cString: cText),
+                    startTime: Double(t0) / 100.0,
+                    endTime: Double(t1) / 100.0,
+                    noSpeechProbability: whisper_full_get_segment_no_speech_prob(context, i),
+                    confidence: meanTokenProbability(segment: i)
+                )
             )
         }
         return segments
+    }
+
+    /// Mean probability of the segment's text tokens (timestamp and other special
+    /// tokens excluded - everything at or past `whisper_token_eot` is special).
+    /// Hallucinated text tends to come with low per-token probability, which makes
+    /// this the second hallucination signal after `no_speech_prob`, and what the UI
+    /// shows as "low confidence".
+    private func meanTokenProbability(segment: Int32) -> Float {
+        let eot = whisper_token_eot(context)
+        var total: Float = 0
+        var count = 0
+        for j in 0..<whisper_full_n_tokens(context, segment) {
+            guard whisper_full_get_token_id(context, segment, j) < eot else { continue }
+            total += whisper_full_get_token_p(context, segment, j)
+            count += 1
+        }
+        return count == 0 ? 1 : total / Float(count)
     }
 
     /// Language whisper.cpp itself detected on the most recent `transcribe` call.

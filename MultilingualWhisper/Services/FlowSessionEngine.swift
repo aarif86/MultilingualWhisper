@@ -373,7 +373,7 @@ final class FlowSessionEngine {
             }
             DictationHandoff.publish(result.text)
             ClipboardFallback.place(result.text)
-            saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName)
+            saveToHistory(text: result.text, model: result.modelUsed, language: result.languageTag, duration: duration, audioFileName: audioFileName, confidence: result.confidence)
             DarwinNotification.post(FlowSessionState.stateChanged)
             DebugLogger.shared.log("FlowSession utterance transcribed: \(result.text.count) chars", category: "flow")
             recordLatency(capture: duration, source: "flow")
@@ -394,8 +394,8 @@ final class FlowSessionEngine {
         DebugLogger.shared.log("\(stage.line) | \(latencyLog.summary() ?? "")", category: "latency")
     }
 
-    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?) {
-        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName)
+    private func saveToHistory(text: String, model: WhisperModelType, language: LanguageType, duration: TimeInterval, audioFileName: String?, confidence: Float) {
+        let record = Transcription(text: text, duration: duration, languageUsed: language, modelUsed: model, audioFileName: audioFileName, confidence: confidence)
         modelContext.insert(record)
         try? modelContext.save()
     }

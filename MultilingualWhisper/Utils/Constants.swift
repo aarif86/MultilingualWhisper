@@ -100,6 +100,9 @@ enum Constants {
     /// tapping the mic and starting to speak is not a pause.
     static let flowSilenceGrace: TimeInterval = 1.2
     static let defaultVADThreshold: Float = 0.7
+    /// Below this mean token probability a transcript is marked "low confidence"
+    /// in History (WhisperService.TranscriptionResult.confidence).
+    static let lowConfidence: Float = 0.5
 
     // MARK: - Language detection heuristics
     //

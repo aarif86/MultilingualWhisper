@@ -63,6 +63,21 @@ final class AppSettings {
         didSet { defaults.set(keepRecentAudio, forKey: Keys.keepRecentAudio) }
     }
 
+    /// Run whisper.cpp's Silero VAD over each recording and decode only the
+    /// speech - skips silence-hallucinations and is faster. On by default; the
+    /// toggle exists for the case where it trims a very quiet speaker.
+    var skipSilence: Bool {
+        didSet { defaults.set(skipSilence, forKey: Keys.skipSilence) }
+    }
+
+    /// Feed the Custom Dictionary's written forms to the decoder as a short
+    /// glossary prompt (GlossaryPrompt). Off by default: prompting these custom-
+    /// converted models is the one decoder change that has never been exercised
+    /// on a device, and a real "nothing shows up" report once coincided with it.
+    var vocabularyHints: Bool {
+        didSet { defaults.set(vocabularyHints, forKey: Keys.vocabularyHints) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -74,6 +89,8 @@ final class AppSettings {
         self.maxRecordDurationSeconds = defaults.object(forKey: Keys.maxRecordDuration) as? Int ?? Int(Constants.chunkDurationSeconds)
         self.saveDebugAudio = defaults.object(forKey: Keys.saveDebugAudio) as? Bool ?? false
         self.keepRecentAudio = defaults.object(forKey: Keys.keepRecentAudio) as? Bool ?? true
+        self.skipSilence = defaults.object(forKey: Keys.skipSilence) as? Bool ?? true
+        self.vocabularyHints = defaults.object(forKey: Keys.vocabularyHints) as? Bool ?? false
     }
 
     private enum Keys {
@@ -85,5 +102,7 @@ final class AppSettings {
         static let maxRecordDuration = "settings.maxRecordDuration"
         static let saveDebugAudio = "settings.saveDebugAudio"
         static let keepRecentAudio = "settings.keepRecentAudio"
+        static let skipSilence = "settings.skipSilence"
+        static let vocabularyHints = "settings.vocabularyHints"
     }
 }

@@ -79,7 +79,10 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 0) {
+                header
+
+                List {
                 Section {
                     topContent
                 }
@@ -108,20 +111,12 @@ struct HomeView: View {
                 }
             }
             .searchable(text: $historyViewModel.searchText, prompt: "Search transcriptions")
-            .navigationTitle(Constants.appName)
-            .navigationBarTitleDisplayMode(.inline)
             .scrollContentBackground(.hidden)
             .background(Brand.paper)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(Constants.appName)
-                        .font(.brandSerif(20))
-                        .foregroundStyle(Brand.ink)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    toolbarMenu
-                }
             }
+            .background(Brand.paper)
+            .navigationTitle(Constants.appName)
+            .toolbar(.hidden, for: .navigationBar)
             .alert("Something went wrong", isPresented: errorBinding, presenting: errorMessage) { _ in
                 if viewModel.microphonePermissionDenied {
                     Button("Open Settings") {
@@ -157,13 +152,41 @@ struct HomeView: View {
         }
     }
 
+    // A fully custom header, not the system navigation bar - see how Willow
+    // and Wispr Flow do this: their wordmark/toggle row is drawn as normal
+    // content, not native toolbar chrome, which is what let the earlier
+    // toolbar-based Toggle get clipped by iOS's own trailing-item grouping.
+    // Fixed above the List (not scrolling with it) so Flow stays reachable
+    // without scrolling, matching both reference apps.
+    private var header: some View {
+        HStack(spacing: 14) {
+            toolbarMenu
+                .font(.title3)
+                .foregroundStyle(Brand.inkSoft)
+
+            Spacer()
+
+            Text(Constants.appName)
+                .font(.brandSerif(20))
+                .foregroundStyle(Brand.ink)
+
+            Spacer()
+
+            Toggle("Flow", isOn: flowToggleBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(Brand.goldDeep)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+    }
+
     // MARK: - Top section (record controls + Flow status)
 
     @ViewBuilder
     private var topContent: some View {
         VStack(spacing: Constants.standardPadding) {
-            flowToggleCard
-
             if !hasSeenKeyboardSetupNudge {
                 keyboardSetupNudge
             }
@@ -210,32 +233,6 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .padding()
-    }
-
-    // A plain content-area row rather than a toolbar item - a Toggle placed
-    // in a ToolbarItem sits inside iOS's own auto-grouped trailing-toolbar
-    // capsule, which has been reported to clip/misrender custom-tinted,
-    // label-hidden controls like this one on newer iOS versions. A row in
-    // the normal view hierarchy renders exactly as written, on every iOS
-    // version, and also gives Flow a visible name/status instead of an
-    // unlabeled switch.
-    private var flowToggleCard: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Flow")
-                    .font(.headline)
-                    .foregroundStyle(Brand.ink)
-                Text(flowSession.isActive ? "On - listening from the keyboard" : "Off")
-                    .font(.caption)
-                    .foregroundStyle(Brand.inkSoft)
-            }
-            Spacer()
-            Toggle("Flow", isOn: flowToggleBinding)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(Brand.goldDeep)
-        }
-        .brandCard()
     }
 
     private var keyboardSetupNudge: some View {

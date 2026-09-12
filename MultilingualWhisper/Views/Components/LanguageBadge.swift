@@ -22,14 +22,18 @@ struct LanguageBadge: View {
         return components.map(\.rawValue).joined(separator: " + ")
     }
 
+    // Every case here is a text color on a ~15%-opacity tint of itself (near-
+    // white) - `Brand.gold` (2.9:1) and `Brand.inkFaint` (3.0:1) both fail
+    // WCAG AA's 4.5:1 for normal text at this badge's caption size, so text
+    // colors stick to `goldDeep`/`inkSoft`/`terracotta`, all verified >=4.5:1.
     private var color: Color {
         switch language {
         case .singlish: return Brand.inkSoft
         case .malay: return Brand.goldDeep
         case .arabic: return Brand.terracotta
-        case .english: return Brand.inkFaint
-        case .mixed: return Brand.gold
-        case .unknown: return Brand.inkFaint
+        case .english: return Brand.inkSoft
+        case .mixed: return Brand.goldDeep
+        case .unknown: return Brand.inkSoft
         }
     }
 }

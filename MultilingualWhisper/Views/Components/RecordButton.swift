@@ -11,10 +11,10 @@ struct RecordButton: View {
                 Circle()
                     .fill(isRecording ? Brand.terracottaGradient : Brand.goldGradient)
                     .frame(width: Constants.recordButtonSize, height: Constants.recordButtonSize)
-                    .shadow(color: (isRecording ? Brand.terracotta : Brand.gold).opacity(0.45), radius: 16, y: 8)
+                    .shadow(color: (isRecording ? Brand.terracotta : Brand.goldSolid).opacity(0.45), radius: 16, y: 8)
                     .overlay(
                         Circle()
-                            .strokeBorder((isRecording ? Brand.terracotta : Brand.gold).opacity(0.16), lineWidth: 9)
+                            .strokeBorder((isRecording ? Brand.terracotta : Brand.goldSolid).opacity(0.16), lineWidth: 9)
                             .frame(width: Constants.recordButtonSize + 18, height: Constants.recordButtonSize + 18)
                     )
                     .scaleEffect(isRecording ? 1 + CGFloat(level) * 0.12 : 1)

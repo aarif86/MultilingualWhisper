@@ -143,6 +143,7 @@ struct CustomDictionaryView: View {
         } actions: {
             Button("Add a Correction") { editorMode = .add }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.goldSolid)
             Button("Paste a List") { showingPasteSheet = true }
         }
     }
@@ -515,6 +516,7 @@ private struct ExportSheet: View {
                     Label("Share CSV", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.goldSolid)
             }
             .padding()
             .navigationTitle("Export Dictionary")

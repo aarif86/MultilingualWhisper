@@ -54,11 +54,13 @@ struct OnboardingView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            // Solid goldDeep, not the gradient - this button carries real text,
-            // and `goldGradient`'s lighter end doesn't clear 4.5:1 for white
-            // text (goldDeep alone measures ~4.78:1, verified).
-            .background(Brand.goldDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: Brand.goldDeep.opacity(0.35), radius: 14, y: 8)
+            // Solid goldSolid, not the gradient or the adaptive goldDeep -
+            // this button carries real white text, and goldSolid is the one
+            // gold token that stays a fixed, dark-enough fill in both themes
+            // (verified ~4.78:1 for white text; goldGradient's lighter end
+            // and goldDeep's dark-mode brightening would each fail this).
+            .background(Brand.goldSolid, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: Brand.goldSolid.opacity(0.35), radius: 14, y: 8)
             .buttonStyle(.plain)
             .padding(.horizontal, 28)
             .padding(.bottom, 24)
@@ -116,6 +118,7 @@ struct OnboardingView: View {
                             }
                         }
                         .buttonStyle(.bordered)
+                        .tint(Brand.goldDeep)
                     }
                 default:
                     Button {
@@ -129,6 +132,7 @@ struct OnboardingView: View {
                         Label("Allow the microphone", systemImage: "mic.badge.plus")
                     }
                     .buttonStyle(.bordered)
+                    .tint(Brand.goldDeep)
                     .accessibilityIdentifier("onboarding.allowMicrophone")
                 }
             }
@@ -183,16 +187,19 @@ struct OnboardingView: View {
             case .downloading:
                 Button("Pause") { modelDownloadService.pauseDownload(model) }
                     .buttonStyle(.bordered)
+                    .tint(Brand.goldDeep)
                     .controlSize(.small)
             case .verifying:
                 ProgressView()
             case .paused:
                 Button("Resume") { modelDownloadService.startDownload(model) }
                     .buttonStyle(.borderedProminent)
+                    .tint(Brand.goldSolid)
                     .controlSize(.small)
             case .notDownloaded, .failed:
                 Button("Get") { modelDownloadService.startDownload(model) }
                     .buttonStyle(.borderedProminent)
+                    .tint(Brand.goldSolid)
                     .controlSize(.small)
                     .accessibilityIdentifier("onboarding.download.\(model.rawValue)")
             }
@@ -231,6 +238,7 @@ struct OnboardingView: View {
                     Label("Show me the steps", systemImage: "list.number")
                 }
                 .buttonStyle(.bordered)
+                .tint(Brand.goldDeep)
             }
         }
     }

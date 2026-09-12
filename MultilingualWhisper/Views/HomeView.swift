@@ -175,7 +175,7 @@ struct HomeView: View {
             Toggle("Flow", isOn: flowToggleBinding)
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .tint(Brand.goldDeep)
+                .tint(Brand.goldSolid)
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
@@ -229,6 +229,7 @@ struct HomeView: View {
                     .font(.footnote)
             }
             .buttonStyle(.bordered)
+            .tint(Brand.goldDeep)
             .disabled(viewModel.isRecording || viewModel.phase == .transcribing)
             .frame(maxWidth: .infinity)
         }
@@ -256,7 +257,7 @@ struct HomeView: View {
                 showKeyboardSetup = true
             }
             .buttonStyle(.borderedProminent)
-            .tint(Brand.goldDeep)
+            .tint(Brand.goldSolid)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .brandCard()
@@ -360,6 +361,7 @@ struct HomeView: View {
             .disabled(viewModel.transcript.isEmpty)
         }
         .buttonStyle(.bordered)
+        .tint(Brand.goldDeep)
         .labelStyle(.iconOnly)
         .font(.title3)
         .frame(maxWidth: .infinity)

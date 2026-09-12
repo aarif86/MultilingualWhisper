@@ -21,6 +21,7 @@ struct ModelStatusRow: View {
             HStack {
                 Button(primaryActionTitle, action: primaryAction)
                     .buttonStyle(.bordered)
+                    .tint(Brand.goldDeep)
                     .disabled(state == .downloaded || state == .verifying)
 
                 if state == .downloaded {

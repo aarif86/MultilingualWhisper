@@ -119,12 +119,6 @@ struct HomeView: View {
                         .foregroundStyle(Brand.ink)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Toggle("Flow", isOn: flowToggleBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .tint(Brand.gold)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
                     toolbarMenu
                 }
             }
@@ -168,6 +162,8 @@ struct HomeView: View {
     @ViewBuilder
     private var topContent: some View {
         VStack(spacing: Constants.standardPadding) {
+            flowToggleCard
+
             if !hasSeenKeyboardSetupNudge {
                 keyboardSetupNudge
             }
@@ -214,6 +210,32 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .padding()
+    }
+
+    // A plain content-area row rather than a toolbar item - a Toggle placed
+    // in a ToolbarItem sits inside iOS's own auto-grouped trailing-toolbar
+    // capsule, which has been reported to clip/misrender custom-tinted,
+    // label-hidden controls like this one on newer iOS versions. A row in
+    // the normal view hierarchy renders exactly as written, on every iOS
+    // version, and also gives Flow a visible name/status instead of an
+    // unlabeled switch.
+    private var flowToggleCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Flow")
+                    .font(.headline)
+                    .foregroundStyle(Brand.ink)
+                Text(flowSession.isActive ? "On - listening from the keyboard" : "Off")
+                    .font(.caption)
+                    .foregroundStyle(Brand.inkSoft)
+            }
+            Spacer()
+            Toggle("Flow", isOn: flowToggleBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(Brand.goldDeep)
+        }
+        .brandCard()
     }
 
     private var keyboardSetupNudge: some View {

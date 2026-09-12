@@ -30,6 +30,7 @@ struct OnboardingView: View {
                 Spacer()
                 Button("Skip") { finish() }
                     .font(.subheadline)
+                    .foregroundStyle(Brand.inkSoft)
                     .padding()
                     .accessibilityIdentifier("onboarding.skip")
             }
@@ -49,12 +50,18 @@ struct OnboardingView: View {
                     finish()
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.horizontal, 32)
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Brand.goldGradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: Brand.gold.opacity(0.35), radius: 14, y: 8)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 28)
             .padding(.bottom, 24)
             .accessibilityIdentifier("onboarding.continue")
         }
+        .background(Brand.paper)
         .sheet(isPresented: $showKeyboardSetup) {
             KeyboardSetupView()
         }
@@ -188,7 +195,7 @@ struct OnboardingView: View {
             }
         }
         .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
+        .background(Brand.cardWarm, in: RoundedRectangle(cornerRadius: Constants.cornerRadius, style: .continuous))
     }
 
     // MARK: - Page 3: the keyboard
@@ -232,14 +239,15 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Image(systemName: symbol)
                     .font(.system(size: 44))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Brand.gold)
                     .padding(.top, 8)
                 Text(title)
-                    .font(.title2.bold())
+                    .font(.brandSerif(28))
+                    .foregroundStyle(Brand.ink)
                     .multilineTextAlignment(.center)
                 Text(subtitle)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.inkSoft)
                     .multilineTextAlignment(.center)
                 content()
                     .padding(.top, 4)

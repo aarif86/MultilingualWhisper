@@ -24,12 +24,12 @@ struct LanguageBadge: View {
 
     private var color: Color {
         switch language {
-        case .singlish: return .blue
-        case .malay: return .green
-        case .arabic: return .purple
-        case .english: return .indigo
-        case .mixed: return .orange
-        case .unknown: return .gray
+        case .singlish: return Brand.inkSoft
+        case .malay: return Brand.goldDeep
+        case .arabic: return Brand.terracotta
+        case .english: return Brand.inkFaint
+        case .mixed: return Brand.gold
+        case .unknown: return Brand.inkFaint
         }
     }
 }

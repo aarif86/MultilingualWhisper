@@ -109,11 +109,20 @@ struct HomeView: View {
             }
             .searchable(text: $historyViewModel.searchText, prompt: "Search transcriptions")
             .navigationTitle(Constants.appName)
+            .navigationBarTitleDisplayMode(.inline)
+            .scrollContentBackground(.hidden)
+            .background(Brand.paper)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(Constants.appName)
+                        .font(.brandSerif(20))
+                        .foregroundStyle(Brand.ink)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Toggle("Flow", isOn: flowToggleBinding)
                         .labelsHidden()
                         .toggleStyle(.switch)
+                        .tint(Brand.gold)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     toolbarMenu
@@ -228,10 +237,10 @@ struct HomeView: View {
                 showKeyboardSetup = true
             }
             .buttonStyle(.borderedProminent)
+            .tint(Brand.gold)
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
+        .brandCard()
     }
 
     private var statsChip: some View {
@@ -241,18 +250,17 @@ struct HomeView: View {
             statTile(value: "\(historyViewModel.streak(transcriptions))d", label: "streak")
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
+        .brandCard(padding: 10)
     }
 
     private func statTile(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.headline)
-                .monospacedDigit()
+                .font(.system(.title3, design: .monospaced).weight(.semibold))
+                .foregroundStyle(Brand.ink)
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Brand.inkSoft)
         }
         .frame(maxWidth: .infinity)
     }
@@ -306,9 +314,8 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding()
         .frame(maxWidth: .infinity)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Constants.cornerRadius))
+        .brandCard()
     }
 
     private var actionButtons: some View {

@@ -38,6 +38,11 @@ targets:
       path: Generated/Info.plist
       properties:
         CFBundleDisplayName: "Nasar Flow"
+        # DM Serif Display (Resources/Fonts) - the brand's headline face,
+        # used for hero moments only (wordmark, onboarding titles). See
+        # Theme.swift's Font.brandSerif.
+        UIAppFonts:
+          - DMSerifDisplay-Regular.ttf
         NSMicrophoneUsageDescription: "Nasar Flow needs microphone access to record and transcribe your speech - entirely on-device, nothing leaves your phone."
         # Lets FlowSessionEngine's audio engine keep running while the app is
         # backgrounded - required for the keyboard's "Flow" session (activate

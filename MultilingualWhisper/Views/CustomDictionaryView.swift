@@ -53,6 +53,8 @@ struct CustomDictionaryView: View {
             }
         }
         .navigationTitle("Custom Dictionary")
+        .scrollContentBackground(.hidden)
+        .background(Brand.paper)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
@@ -117,16 +119,17 @@ struct CustomDictionaryView: View {
     private var languageWordsRow: some View {
         HStack(spacing: 12) {
             Image(systemName: "text.bubble.fill")
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 28)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(Brand.goldGradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Language Words")
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Brand.ink)
                 Text("Import a WhatsApp chat to teach new words, or review what's already been added.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Brand.inkSoft)
             }
         }
         .padding(.vertical, 4)

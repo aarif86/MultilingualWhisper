@@ -237,7 +237,7 @@ struct HomeView: View {
                 showKeyboardSetup = true
             }
             .buttonStyle(.borderedProminent)
-            .tint(Brand.gold)
+            .tint(Brand.goldDeep)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .brandCard()

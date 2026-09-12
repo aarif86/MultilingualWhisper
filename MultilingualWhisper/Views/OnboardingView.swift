@@ -54,8 +54,11 @@ struct OnboardingView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Brand.goldGradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: Brand.gold.opacity(0.35), radius: 14, y: 8)
+            // Solid goldDeep, not the gradient - this button carries real text,
+            // and `goldGradient`'s lighter end doesn't clear 4.5:1 for white
+            // text (goldDeep alone measures ~4.78:1, verified).
+            .background(Brand.goldDeep, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: Brand.goldDeep.opacity(0.35), radius: 14, y: 8)
             .buttonStyle(.plain)
             .padding(.horizontal, 28)
             .padding(.bottom, 24)
@@ -239,7 +242,7 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Image(systemName: symbol)
                     .font(.system(size: 44))
-                    .foregroundStyle(Brand.gold)
+                    .foregroundStyle(Brand.goldDeep)
                     .padding(.top, 8)
                 Text(title)
                     .font(.brandSerif(28))

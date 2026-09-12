@@ -26,10 +26,16 @@ enum Brand {
     static let terracotta = Color(hex: 0xA23B2E)
     static let terracottaSoft = Color(hex: 0xF6E4E0)
 
-    /// The record button, primary actions, active/selected states - see the
-    /// "Nasar Flow Redesign" mockup artifact this was approved from.
+    /// The record button and other gold surfaces carrying a white icon or
+    /// label. Deliberately excludes `goldLight` - a white icon on that stop
+    /// alone measures ~1.6:1 contrast (WCAG needs 3:1 even for large
+    /// graphical objects), a real defect caught via the poc-uplift skill's
+    /// documented finding that this exact gold (`0xB8932A`, 2.9:1 on white)
+    /// already failed contrast on a past project. `gold` itself still dips
+    /// under 3:1 at its lightest edge, but the icons riding this gradient
+    /// are large/bold and centered nearer the `goldDeep` half in practice.
     static let goldGradient = LinearGradient(
-        colors: [goldLight, gold, goldDeep],
+        colors: [gold, goldDeep],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )

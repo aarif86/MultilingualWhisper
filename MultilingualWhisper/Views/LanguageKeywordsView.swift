@@ -52,6 +52,8 @@ struct LanguageKeywordsView: View {
             }
         }
         .navigationTitle("Language Words")
+        .scrollContentBackground(.hidden)
+        .background(Brand.paper)
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [.zip, .plainText, .text],

@@ -108,6 +108,7 @@ struct SettingsView: View {
                             Text(level.rawValue).tag(level)
                         }
                     }
+                    .pickerStyle(.segmented)
                     Text(viewModel.cleanupLevel.detail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -215,6 +216,8 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .scrollContentBackground(.hidden)
+            .background(Brand.paper)
             .onAppear { debugRefreshTrigger.toggle() }
             .sheet(isPresented: $showKeyboardSetup) {
                 KeyboardSetupView()

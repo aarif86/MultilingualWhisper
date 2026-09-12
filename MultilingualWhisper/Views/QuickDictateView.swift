@@ -97,6 +97,7 @@ struct QuickDictateView: View {
 
             Button("Done") { dismiss() }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.goldSolid)
         }
     }
 }

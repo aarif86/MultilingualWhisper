@@ -56,6 +56,7 @@ struct FlowActivationView: View {
 
             Button("Done") { dismiss() }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.goldSolid)
                 .padding(.bottom, 24)
         }
         .task {

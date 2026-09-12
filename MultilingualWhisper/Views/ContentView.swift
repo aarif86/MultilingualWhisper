@@ -32,6 +32,7 @@ struct ContentView: View {
             SettingsView(modelDownloadService: modelDownloadService)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
+        .tint(Brand.goldDeep)
         .fullScreenCover(isPresented: $quickDictateActive) {
             QuickDictateView(audioService: audioService, whisperService: whisperService)
                 .id(quickDictateSessionID)
